@@ -401,6 +401,68 @@ def create_app(db_path=None):
             result.update(username=con.execute("SELECT username FROM users WHERE id=?", (uid,)).fetchone()[0], strategies=strategies, minimum_reviews=MIN_REVIEWS, execution_mode="paper")
         return result
 
+
+    # Strategy Lab: persistent user-owned research drafts. No automated trade execution.
+    with db() as con:
+        con.execute("""CREATE TABLE IF NOT EXISTS lab_ideas(
+            id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id),
+            title TEXT NOT NULL, hypothesis TEXT NOT NULL, symbol TEXT NOT NULL,
+            timeframe TEXT NOT NULL, visibility TEXT NOT NULL DEFAULT 'private',
+            status TEXT NOT NULL DEFAULT 'draft', created_at TEXT NOT NULL)""")
+        con.execute("""CREATE TABLE IF NOT EXISTS lab_notes(
+            id INTEGER PRIMARY KEY, idea_id INTEGER NOT NULL REFERENCES lab_ideas(id),
+            user_id INTEGER NOT NULL REFERENCES users(id), role TEXT NOT NULL,
+            content TEXT NOT NULL, created_at TEXT NOT NULL)""")
+
+    class LabIdea(BaseModel):
+        title: str = Field(min_length=3, max_length=120)
+        hypothesis: str = Field(min_length=10, max_length=5000)
+        symbol: str = Field(min_length=1, max_length=32, pattern=r"^[a-zA-Z0-9.^_-]+$")
+        timeframe: Literal["15m", "1h", "4h", "1d", "1w"] = "4h"
+
+    class LabNote(BaseModel):
+        content: str = Field(min_length=1, max_length=5000)
+
+    @app.get("/api/lab")
+    def lab_list(uid=Depends(user)):
+        with db() as con:
+            ideas = [dict(r) for r in con.execute("SELECT * FROM lab_ideas WHERE user_id=? ORDER BY id DESC LIMIT 100", (uid,)).fetchall()]
+            notes = [dict(r) for r in con.execute("SELECT * FROM lab_notes WHERE user_id=? ORDER BY id DESC LIMIT 300", (uid,)).fetchall()]
+        return {"ideas": ideas, "notes": notes, "mode": "research_only"}
+
+    @app.post("/api/lab", status_code=201)
+    def lab_create(payload: LabIdea, uid=Depends(user)):
+        with db() as con:
+            idea_id = con.execute("INSERT INTO lab_ideas(user_id,title,hypothesis,symbol,timeframe,created_at) VALUES(?,?,?,?,?,?)",
+                (uid,payload.title.strip(),payload.hypothesis.strip(),payload.symbol.upper(),payload.timeframe,now())).lastrowid
+            audit(con, uid, "lab_idea_created", idea_id, {"symbol":payload.symbol.upper()})
+        return {"id": idea_id, "status": "draft"}
+
+    @app.post("/api/lab/{idea_id}/notes", status_code=201)
+    def lab_add_note(idea_id: int, payload: LabNote, uid=Depends(user)):
+        with db() as con:
+            idea = con.execute("SELECT id FROM lab_ideas WHERE id=? AND user_id=?", (idea_id,uid)).fetchone()
+            if not idea: raise HTTPException(404,"Strategy draft not found")
+            note_id = con.execute("INSERT INTO lab_notes(idea_id,user_id,role,content,created_at) VALUES(?,?,?,?,?)",
+                (idea_id,uid,"user",payload.content.strip(),now())).lastrowid
+            audit(con,uid,"lab_note_added",idea_id,{"note_id":note_id})
+        return {"id":note_id}
+
+    @app.get("/api/lab/{idea_id}/evidence")
+    def lab_evidence(idea_id: int, uid=Depends(user)):
+        # Transparent lexical baseline. No fabricated embeddings, LLM, or backtest claims.
+        with db() as con:
+            idea=con.execute("SELECT * FROM lab_ideas WHERE id=? AND user_id=?", (idea_id,uid)).fetchone()
+            if not idea: raise HTTPException(404,"Strategy draft not found")
+            decisions=con.execute("""SELECT d.id,d.note,d.outcome,d.lesson,s.setup,s.symbol
+                FROM decisions d JOIN strategies s ON s.id=d.strategy_id
+                WHERE d.user_id=? AND s.symbol=? ORDER BY d.id DESC LIMIT 100""",
+                (uid,idea["symbol"])).fetchall()
+        words=set(w.lower() for w in (idea["title"]+" "+idea["hypothesis"]).split() if len(w)>3)
+        ranked=sorted((dict(d) for d in decisions),key=lambda d:sum(w in (d["note"]+" "+d["setup"]).lower() for w in words),reverse=True)
+        return {"method":"symbol-filtered lexical retrieval","evidence":ranked[:10],
+                "limitations":"Not semantic RAG, not a backtest, and not a predictive success rate."}
+
     @app.get("/health/ready")
     def ready():
         with db() as con:
