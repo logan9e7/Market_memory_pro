@@ -51,6 +51,7 @@ async function refresh() {
   }, 'No matching opportunities yet. Qualified strategies create proposals when you record a matching price.');
   document.querySelectorAll('[data-opportunity]').forEach(form => form.addEventListener('submit', event => { event.preventDefault(); const action=event.submitter.value; submit(form, async () => { await api(`opportunities/${form.dataset.opportunity}/approval`,{action,quantity:Number(form.elements.quantity.value),expected_quote_id:Number(form.dataset.quote)}); await refresh(); notice(action==='approve'?'Approved. One paper order recorded; no real trade was placed.':'Proposal rejected.'); }); }));
   list('#orders', state.paper_orders, o => `<div class="item"><strong>${e(o.side.toUpperCase())} ${e(o.symbol)}</strong> · quantity ${e(o.quantity)} · reference ${e(money(o.reference_price,o.currency))}<div class="meta">Explicit approval #${o.opportunity_id} · ${e(date(o.recorded_at))} · simulated record, no broker fill</div></div>`, 'Orders appear only after your explicit approval.');
+  await refreshLab();
   setTab(activeTab);
 }
 
@@ -68,3 +69,23 @@ async function captureVisit(kind) {
 document.addEventListener('visibilitychange', () => { if(document.visibilityState==='hidden') void captureVisit('close'); else if(signedIn) void captureVisit('open').then(refresh).catch(err=>notice(err.message,true)); });
 window.addEventListener('pagehide',()=>{void captureVisit('close');});
 refresh().then(async()=>{await captureVisit('open'); await refresh();}).catch(err=>{showAuth(); if(!err.message.includes('Sign in')) notice(err.message,true);});
+
+async function refreshLab() {
+  const data = await api('lab');
+  list('#lab-ideas', data.ideas, idea => {
+    const notes=data.notes.filter(n=>n.idea_id===idea.id);
+    return `<article class="panel"><div class="eyebrow">${e(idea.symbol)} · ${e(idea.timeframe)} · PRIVATE</div><h2>${e(idea.title)}</h2><p>${e(idea.hypothesis)}</p><div class="meta">${e(date(idea.created_at))}</div><div class="actions"><button class="secondary" data-evidence="${idea.id}">Find journal evidence</button></div><div id="lab-evidence-${idea.id}" class="stack"></div><div class="stack">${notes.map(n=>`<div class="item">${e(n.content)}<div class="meta">${e(date(n.created_at))}</div></div>`).join('')}</div><form data-lab-note="${idea.id}"><label>Brainstorm note<textarea name="content" required maxlength="5000" placeholder="What conditions would invalidate this idea?"></textarea></label><button>Save note</button></form></article>`;
+  }, 'No drafts yet. Start with one hypothesis.');
+  document.querySelectorAll('[data-lab-note]').forEach(form=>form.addEventListener('submit',event=>{
+    event.preventDefault();submit(form,async()=>{await api('lab/'+form.dataset.labNote+'/notes',fields(form));await refreshLab();notice('Research note saved.');});
+  }));
+  document.querySelectorAll('[data-evidence]').forEach(button=>button.addEventListener('click',async()=>{
+    try { const result=await api('lab/'+button.dataset.evidence+'/evidence');
+      list('#lab-evidence-'+button.dataset.evidence,result.evidence,d=>`<div class="item"><strong>${e(d.setup)}</strong><p>${e(d.note)}</p><div class="meta">Outcome: ${e(d.outcome||'pending')} · Journal #${d.id}</div></div>`,'No same-symbol journal records yet.');
+      notice('Retrieved journal evidence. This is not a backtest or predictive score.');
+    }catch(err){notice(err.message,true);}
+  }));
+}
+$('#lab-form').addEventListener('submit',event=>{
+  event.preventDefault();submit(event.target,async()=>{await api('lab',fields(event.target));event.target.reset();await refreshLab();notice('Private strategy draft saved.');});
+});
