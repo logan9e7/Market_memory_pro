@@ -464,6 +464,61 @@ def create_app(db_path=None):
         return {"method":"symbol-filtered lexical retrieval","evidence":ranked[:10],
                 "limitations":"Not semantic RAG, not a backtest, and not a predictive success rate."}
 
+
+    # Read-only research endpoints. Credentials stay server-side; never execute orders.
+    class TradeSample(BaseModel):
+        returns: list[float] = Field(min_length=1,max_length=10000)
+        @field_validator("returns")
+        @classmethod
+        def valid_returns(cls, values):
+            if any(not -1 < x < 1000 for x in values):
+                raise ValueError("Returns must be finite decimal fractions greater than -100%")
+            return values
+
+    class OptionModel(BaseModel):
+        spot: float = Field(gt=0,allow_inf_nan=False)
+        strike: float = Field(gt=0,allow_inf_nan=False)
+        years: float = Field(gt=0,le=30,allow_inf_nan=False)
+        rate: float = Field(ge=-1,le=2,allow_inf_nan=False)
+        volatility: float = Field(gt=0,le=10,allow_inf_nan=False)
+        kind: Literal["call","put"]
+
+    @app.post("/api/quant/trades")
+    def quant_trades(payload: TradeSample, uid=Depends(user)):
+        from app.quant import trade_stats
+        return trade_stats(payload.returns)
+
+    @app.post("/api/quant/option")
+    def quant_option(payload: OptionModel, uid=Depends(user)):
+        from app.quant import black_scholes
+        return black_scholes(**payload.model_dump())
+
+    @app.get("/api/markets/providers")
+    def market_providers(uid=Depends(user)):
+        return {"markets":[
+            {"market":"crypto_spot","provider":"binance","available":True,"authentication":"public"},
+            {"market":"india_equities_and_fo","provider":"upstox","available":bool(os.getenv("UPSTOX_ACCESS_TOKEN")),"authentication":"server_token"},
+            {"market":"us_equities","provider":"alpaca","available":bool(os.getenv("ALPACA_API_KEY") and os.getenv("ALPACA_SECRET_KEY")),"authentication":"server_keys"}],
+            "execution":"disabled","notice":"Provider entitlements, geographic availability and data licensing apply."}
+
+    @app.get("/api/markets/crypto/candles")
+    async def crypto_candles(symbol: str="BTCUSDT", interval: Literal["15m","1h","4h","1d"]="4h", limit: int=100, uid=Depends(user)):
+        import re
+        import httpx
+        if not re.fullmatch(r"[A-Z0-9]{3,20}",symbol) or not 1<=limit<=500:
+            raise HTTPException(422,"Invalid symbol or limit")
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                response=await client.get("https://data-api.binance.vision/api/v3/klines",
+                    params={"symbol":symbol,"interval":interval,"limit":limit})
+            response.raise_for_status()
+        except httpx.HTTPError:
+            raise HTTPException(503,"Crypto market provider temporarily unavailable")
+        return {"provider":"binance","market":"crypto_spot","symbol":symbol,"interval":interval,
+            "candles":[{"timestamp_ms":r[0],"open":float(r[1]),"high":float(r[2]),
+                        "low":float(r[3]),"close":float(r[4]),"volume":float(r[5])} for r in response.json()],
+            "notice":"Exchange-provided data, not investment advice."}
+
     @app.get("/health/ready")
     def ready():
         with db() as con:
