@@ -52,6 +52,7 @@ async function refresh() {
   document.querySelectorAll('[data-opportunity]').forEach(form => form.addEventListener('submit', event => { event.preventDefault(); const action=event.submitter.value; submit(form, async () => { await api(`opportunities/${form.dataset.opportunity}/approval`,{action,quantity:Number(form.elements.quantity.value),expected_quote_id:Number(form.dataset.quote)}); await refresh(); notice(action==='approve'?'Approved. One paper order recorded; no real trade was placed.':'Proposal rejected.'); }); }));
   list('#orders', state.paper_orders, o => `<div class="item"><strong>${e(o.side.toUpperCase())} ${e(o.symbol)}</strong> · quantity ${e(o.quantity)} · reference ${e(money(o.reference_price,o.currency))}<div class="meta">Explicit approval #${o.opportunity_id} · ${e(date(o.recorded_at))} · simulated record, no broker fill</div></div>`, 'Orders appear only after your explicit approval.');
   await refreshLab();
+  await refreshQuantProviders();
   setTab(activeTab);
 }
 
@@ -89,3 +90,9 @@ async function refreshLab() {
 $('#lab-form').addEventListener('submit',event=>{
   event.preventDefault();submit(event.target,async()=>{await api('lab',fields(event.target));event.target.reset();await refreshLab();notice('Private strategy draft saved.');});
 });
+
+function showQuant(selector, obj) { $(selector).innerHTML='<pre class="quant-output">'+e(JSON.stringify(obj,null,2))+'</pre>'; }
+async function refreshQuantProviders() { try { const r=await api('markets/providers'); list('#provider-result',r.markets,m=>'<div class="item"><strong>'+e(m.market)+'</strong> · '+e(m.provider)+' <span class="badge '+(m.available?'':'pending')+'">'+(m.available?'Available':'Credentials required')+'</span></div>','No providers'); }catch(err){ $('#provider-result').textContent=err.message; } }
+$('#quant-trades').addEventListener('submit',event=>{event.preventDefault();submit(event.target,async()=>{const raw=fields(event.target).returns;const values=raw.split(',').map(x=>Number(x.trim())/100);if(!raw.trim()||values.some(x=>!Number.isFinite(x)))throw Error('Enter valid comma-separated returns.');showQuant('#trade-result',await api('quant/trades',{returns:values}));});});
+$('#quant-option').addEventListener('submit',event=>{event.preventDefault();submit(event.target,async()=>{const v=fields(event.target);['spot','strike','years','volatility','rate'].forEach(k=>v[k]=Number(v[k]));showQuant('#option-result',await api('quant/option',v));});});
+$('#market-form').addEventListener('submit',event=>{event.preventDefault();submit(event.target,async()=>{const v=fields(event.target);if(v.market!=='crypto'){showQuant('#market-result',{message:'This provider needs server-side credentials and a provider-specific instrument selector. Use the API directly once configured.',provider:v.market});return;}const params=new URLSearchParams({symbol:v.symbol.toUpperCase(),interval:v.interval,limit:v.limit});const result=await api('markets/crypto/candles?'+params);showQuant('#market-result',{provider:result.provider,symbol:result.symbol,bars:result.candles.length,first:result.candles[0],last:result.candles.at(-1)});});});
