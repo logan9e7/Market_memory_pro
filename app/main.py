@@ -163,10 +163,14 @@ def create_app(db_path=None):
     @app.middleware("http")
     async def browser_security(request: Request, call_next):
         origin = request.headers.get("origin")
-        if request.method not in {"GET", "HEAD", "OPTIONS"} and origin:
+        if request.method not in {"GET", "HEAD", "OPTIONS"}:
             expected = os.getenv("MARKET_MEMORY_ORIGIN") or str(request.base_url).rstrip("/")
-            if origin != expected:
+            if origin and origin != expected:
                 return Response("Cross-origin write rejected", status_code=403)
+            if not origin and request.cookies.get("mm_session"):
+                fetch_site = request.headers.get("sec-fetch-site")
+                if fetch_site not in {"same-origin", "none"}:
+                    return Response("Unverified browser write rejected", status_code=403)
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
