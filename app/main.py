@@ -169,7 +169,7 @@ def create_app(db_path=None):
                 return Response("Cross-origin write rejected", status_code=403)
             if not origin and request.cookies.get("mm_session"):
                 fetch_site = request.headers.get("sec-fetch-site")
-                if fetch_site not in {"same-origin", "none"}:
+                if fetch_site in {"cross-site", "same-site"}:
                     return Response("Unverified browser write rejected", status_code=403)
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
