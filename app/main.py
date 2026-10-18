@@ -31,6 +31,18 @@ class Credentials(BaseModel):
     password: str = Field(min_length=10, max_length=256)
 
 
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=10, max_length=256)
+    new_password: str = Field(min_length=12, max_length=256)
+
+    @field_validator("new_password")
+    @classmethod
+    def strong_password(cls, value):
+        if not any(ch.isalpha() for ch in value) or not any(ch.isdigit() for ch in value):
+            raise ValueError("New password must include a letter and a digit")
+        return value
+
+
 class Quote(BaseModel):
     symbol: str = Field(min_length=1, max_length=32, pattern=r"^[a-zA-Z0-9.^_-]+$")
     price: float = Field(gt=0, allow_inf_nan=False)
@@ -157,6 +169,8 @@ def create_app(db_path=None):
                 return Response("Cross-origin write rejected", status_code=403)
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Referrer-Policy"] = "same-origin"
         response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
         if request.url.path.startswith("/api/"):
@@ -228,6 +242,35 @@ def create_app(db_path=None):
             con.execute("DELETE FROM sessions WHERE token_hash=?", (hashlib.sha256(request.cookies["mm_session"].encode()).hexdigest(),))
         response.delete_cookie("mm_session")
         return {"status": "signed_out"}
+
+    @app.get("/api/auth/session")
+    def session_status(uid=Depends(user)):
+        with db() as con:
+            row = con.execute("SELECT username FROM users WHERE id=?", (uid,)).fetchone()
+        return {"authenticated": True, "username": row["username"]}
+
+    @app.post("/api/auth/logout-all")
+    def logout_all(response: Response, uid=Depends(user)):
+        with db() as con:
+            con.execute("DELETE FROM sessions WHERE user_id=?", (uid,))
+            audit(con, uid, "logout_all", None, {})
+        response.delete_cookie("mm_session")
+        return {"status": "all_sessions_revoked"}
+
+    @app.post("/api/auth/change-password")
+    def change_password(payload: PasswordChange, response: Response, uid=Depends(user)):
+        if payload.current_password == payload.new_password:
+            raise HTTPException(422, "New password must be different")
+        with db() as con:
+            row = con.execute("SELECT password_hash FROM users WHERE id=?", (uid,)).fetchone()
+            stored = row["password_hash"]
+            if not hmac.compare_digest(password_hash(payload.current_password, stored.split(":")[0]), stored):
+                raise HTTPException(401, "Current password is incorrect")
+            con.execute("UPDATE users SET password_hash=? WHERE id=?", (password_hash(payload.new_password), uid))
+            con.execute("DELETE FROM sessions WHERE user_id=?", (uid,))
+            audit(con, uid, "password_changed", None, {})
+        response.delete_cookie("mm_session")
+        return {"status": "password_changed", "reauthentication_required": True}
 
     def stats(con, strategy_id):
         row = con.execute("SELECT SUM(CASE WHEN outcome='win' THEN 1 ELSE 0 END) AS wins,COUNT(outcome) AS completed,COUNT(*) AS total FROM decisions WHERE strategy_id=?", (strategy_id,)).fetchone()
