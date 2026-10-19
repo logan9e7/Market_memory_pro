@@ -35,7 +35,7 @@ class PostgresConnection:
 
     def __init__(self, url):
         # A trusted CA must verify Supabase's certificate and hostname.
-        self.connection = psycopg.connect(url, row_factory=dict_row, connect_timeout=10, sslmode="verify-full")
+        self.connection = psycopg.connect(url, row_factory=dict_row, connect_timeout=10, sslmode="verify-full", sslrootcert="system")
 
     def execute(self, sql, parameters=()):
         if sql == "BEGIN IMMEDIATE":
