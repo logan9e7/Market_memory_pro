@@ -35,7 +35,26 @@ class PostgresConnection:
 
     def __init__(self, url):
         # A trusted CA must verify Supabase's certificate and hostname.
-        self.connection = psycopg.connect(url, row_factory=dict_row, connect_timeout=10, sslmode="verify-full", sslrootcert="system")
+        import os
+        import tempfile
+        from pathlib import Path
+        ca_pem = os.getenv("DATABASE_SSL_ROOT_CERT", "").strip()
+        if ca_pem:
+            if not ca_pem.startswith("-----BEGIN CERTIFICATE-----"):
+                raise ValueError("DATABASE_SSL_ROOT_CERT must contain a PEM certificate")
+            with tempfile.TemporaryDirectory(prefix="market-memory-ca-") as folder:
+                ca_file = Path(folder) / "root.crt"
+                ca_file.write_text(ca_pem + "\n", encoding="utf-8")
+                ca_file.chmod(0o600)
+                self.connection = psycopg.connect(
+                    url, row_factory=dict_row, connect_timeout=10,
+                    sslmode="verify-full", sslrootcert=str(ca_file)
+                )
+        else:
+            self.connection = psycopg.connect(
+                url, row_factory=dict_row, connect_timeout=10,
+                sslmode="verify-full", sslrootcert="system"
+            )
 
     def execute(self, sql, parameters=()):
         if sql == "BEGIN IMMEDIATE":
