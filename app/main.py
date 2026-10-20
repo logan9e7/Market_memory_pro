@@ -62,8 +62,9 @@ class PasswordChange(BaseModel):
     @field_validator("new_password")
     @classmethod
     def strong_password(cls, value):
-        if not any(ch.isalpha() for ch in value) or not any(ch.isdigit() for ch in value):
-            raise ValueError("New password must include a letter and a digit")
+        if not all((any(c.islower() for c in value), any(c.isupper() for c in value),
+                    any(c.isdigit() for c in value), any(not c.isalnum() for c in value))):
+            raise ValueError("Use uppercase, lowercase, number and symbol")
         return value
 
 
@@ -199,11 +200,12 @@ def create_app(db_path=None):
     def audit(con, uid, kind, entity, details):
         con.execute("INSERT INTO audit_events(user_id,kind,entity_id,details,recorded_at) VALUES(?,?,?,?,?)", (uid, kind, entity, json.dumps(details), now()))
 
-    def issue_session(con, uid, response, request):
+    def issue_session(con, uid, response, request, shared_device=False):
         token = secrets.token_urlsafe(32)
         con.execute("DELETE FROM sessions WHERE expires_at<?", (now(),))
-        con.execute("INSERT INTO sessions VALUES(?,?,?)", (hashlib.sha256(token.encode()).hexdigest(), uid, (datetime.now(timezone.utc) + timedelta(days=SESSION_DAYS)).isoformat()))
-        response.set_cookie("mm_session", token, httponly=True, samesite="strict", secure=request.url.scheme == "https" or os.getenv("MARKET_MEMORY_SECURE_COOKIE") == "1", max_age=SESSION_MAX_AGE_SECONDS)
+        lifetime = timedelta(hours=2) if shared_device else timedelta(days=SESSION_DAYS)
+        con.execute("INSERT INTO sessions VALUES(?,?,?)", (hashlib.sha256(token.encode()).hexdigest(), uid, (datetime.now(timezone.utc) + lifetime).isoformat()))
+        response.set_cookie("mm_session", token, httponly=True, samesite="strict", secure=request.url.scheme == "https" or os.getenv("MARKET_MEMORY_SECURE_COOKIE") == "1", max_age=None if shared_device else SESSION_MAX_AGE_SECONDS)
 
     def password_hash(password, salt=None):
         salt = salt or secrets.token_hex(16)
@@ -233,8 +235,11 @@ def create_app(db_path=None):
             issue_session(con, uid, response, request)
         return {"username": payload.username.lower()}
 
+    class LoginCredentials(Credentials):
+        shared_device: bool = False
+
     @app.post("/api/login")
-    def login(payload: Credentials, response: Response, request: Request):
+    def login(payload: LoginCredentials, response: Response, request: Request):
         auth_budget(request, payload.username)
         with db() as con:
             row = con.execute("SELECT * FROM users WHERE username=?", (payload.username.lower(),)).fetchone()
@@ -243,7 +248,7 @@ def create_app(db_path=None):
             candidate = password_hash(payload.password, stored.split(":")[0])
             if not row or not hmac.compare_digest(candidate, stored):
                 raise HTTPException(401, "Invalid username or password")
-            issue_session(con, row["id"], response, request)
+            issue_session(con, row["id"], response, request, payload.shared_device)
         return {"username": row["username"]}
 
     @app.post("/api/logout")
