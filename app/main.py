@@ -20,6 +20,7 @@ from app.database import IntegrityErrors, PostgresConnection
 from app.intelligence import analyze_evidence
 from app.schema import SCHEMA
 from app.retention import RETENTION
+from app.evidence import load_evidence, retention_preview
 
 ROOT = Path(__file__).resolve().parent.parent
 MIN_REVIEWS = 10
@@ -622,21 +623,13 @@ def create_app(db_path=None):
         return {"provider":"alpaca","feed":"iex","symbol":symbol,"data":response.json(),
             "notice":"Free IEX feed is not a consolidated US market feed."}
 
-    # Single source of truth for LLM evidence selection and limits.
-    EVIDENCE_LIMIT = 30
     REPORT_HISTORY_LIMIT = 10
-    EVIDENCE_QUERIES = {
-        "snapshots": "SELECT id,symbol,price,currency,note,kind,recorded_at FROM snapshots WHERE user_id=? ORDER BY id DESC LIMIT ?",
-        "decisions": "SELECT d.id,d.price,d.note,d.outcome,d.lesson,d.recorded_at,s.symbol,s.setup,s.side,s.condition,s.trigger_price FROM decisions d JOIN strategies s ON d.strategy_id=s.id WHERE d.user_id=? ORDER BY d.id DESC LIMIT ?",
-        "quotes": "SELECT id,symbol,price,currency,recorded_at FROM quotes WHERE user_id=? ORDER BY id DESC LIMIT ?",
-    }
 
     @app.post("/api/intelligence/analyze")
     async def intelligence_analyze(uid=Depends(user)):
         """Analyze only this user's recent evidence; never send passwords or tokens."""
         with db() as con:
-            evidence = {name: [dict(row) for row in con.execute(sql, (uid, EVIDENCE_LIMIT)).fetchall()]
-                        for name, sql in EVIDENCE_QUERIES.items()}
+            evidence = load_evidence(con, uid)
         if not any(evidence.values()):
             raise HTTPException(409, "Record a journal entry or price snapshot before analysis")
         try:
@@ -698,6 +691,11 @@ def create_app(db_path=None):
                 "preserve_active_strategy_evidence": RETENTION.preserve_active_strategy_evidence,
                 "deletion_enabled": RETENTION.deletion_enabled,
                 "notice": "Retention is configured; no data will be deleted until verified archival and approval are implemented."}
+
+    @app.get("/api/account/retention/preview")
+    def retention_candidates(uid=Depends(user)):
+        with db() as con:
+            return retention_preview(con, uid, RETENTION.raw_days)
 
     @app.get("/health/ready")
     def ready():
