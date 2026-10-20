@@ -38,7 +38,19 @@ def now():
 
 class Credentials(BaseModel):
     username: str = Field(min_length=3, max_length=80, pattern=r"^[a-zA-Z0-9_.@-]+$")
-    password: str = Field(min_length=10, max_length=256)
+    password: str = Field(min_length=8, max_length=256)
+
+
+class RegistrationCredentials(Credentials):
+    password: str = Field(min_length=12, max_length=256)
+
+    @field_validator("password")
+    @classmethod
+    def validate_strength(cls, value):
+        if not all((any(c.islower() for c in value), any(c.isupper() for c in value),
+                    any(c.isdigit() for c in value), any(not c.isalnum() for c in value))):
+            raise ValueError("Use uppercase, lowercase, number and symbol")
+        return value
 
 
 class PasswordChange(BaseModel):
@@ -209,7 +221,7 @@ def create_app(db_path=None):
             raise HTTPException(429, "Too many authentication attempts; retry in five minutes")
 
     @app.post("/api/register", status_code=201)
-    def register(payload: Credentials, response: Response, request: Request):
+    def register(payload: RegistrationCredentials, response: Response, request: Request):
         auth_budget(request, payload.username)
         with db() as con:
             try:
