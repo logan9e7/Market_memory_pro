@@ -125,6 +125,15 @@ $('#analyze-memory').addEventListener('click', async event => {
   try {
     const report = await api('intelligence/analyze', {});
     renderIntelligence(report);
+    const evolution = await api('intelligence/evolution');
+    if (evolution.status === 'compared') {
+      const summary = document.createElement('p');
+      summary.className = 'muted';
+      summary.textContent = 'Since the previous report: '+evolution.added.length+
+        ' new parameters, '+evolution.revisited.length+' changed descriptions, '+
+        evolution.missing.length+' not repeated. Changes require evidence review.';
+      $('#intelligence-result').prepend(summary);
+    }
     notice('Analysis saved to your private history.');
   } catch (err) {
     $('#intelligence-result').textContent = err.message;
