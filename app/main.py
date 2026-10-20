@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from app.database import IntegrityErrors, PostgresConnection
+from app.intelligence import analyze_evidence
 
 ROOT = Path(__file__).resolve().parent.parent
 MIN_REVIEWS = 10
@@ -126,6 +127,8 @@ CREATE TABLE IF NOT EXISTS paper_orders(id INTEGER PRIMARY KEY,user_id INTEGER N
 CREATE TABLE IF NOT EXISTS audit_events(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),kind TEXT NOT NULL,entity_id INTEGER,details TEXT NOT NULL,recorded_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS decisions_owner ON decisions(user_id,id DESC);
 CREATE INDEX IF NOT EXISTS snapshots_owner ON snapshots(user_id,id DESC);
+CREATE TABLE IF NOT EXISTS analysis_reports(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),model TEXT NOT NULL,report_json TEXT NOT NULL,created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS analysis_reports_owner ON analysis_reports(user_id,id DESC);
 CREATE TABLE IF NOT EXISTS lab_ideas(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),title TEXT NOT NULL,hypothesis TEXT NOT NULL,symbol TEXT NOT NULL,timeframe TEXT NOT NULL,visibility TEXT NOT NULL DEFAULT 'private',status TEXT NOT NULL DEFAULT 'draft',created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS lab_notes(id INTEGER PRIMARY KEY,idea_id INTEGER NOT NULL REFERENCES lab_ideas(id),user_id INTEGER NOT NULL REFERENCES users(id),role TEXT NOT NULL,content TEXT NOT NULL,created_at TEXT NOT NULL);
 """
@@ -625,6 +628,43 @@ def create_app(db_path=None):
             raise HTTPException(502,"Alpaca market data unavailable or access denied")
         return {"provider":"alpaca","feed":"iex","symbol":symbol,"data":response.json(),
             "notice":"Free IEX feed is not a consolidated US market feed."}
+
+    @app.post("/api/intelligence/analyze")
+    async def intelligence_analyze(uid=Depends(user)):
+        """Analyze only this user's recent evidence; never send passwords or tokens."""
+        with db() as con:
+            evidence = {
+                "snapshots": [dict(r) for r in con.execute(
+                    "SELECT id,symbol,price,currency,note,kind,recorded_at FROM snapshots WHERE user_id=? ORDER BY id DESC LIMIT 30", (uid,)).fetchall()],
+                "decisions": [dict(r) for r in con.execute(
+                    "SELECT d.id,d.price,d.note,d.outcome,d.lesson,d.recorded_at,s.symbol,s.setup,s.side,s.condition,s.trigger_price FROM decisions d JOIN strategies s ON d.strategy_id=s.id WHERE d.user_id=? ORDER BY d.id DESC LIMIT 30", (uid,)).fetchall()],
+                "quotes": [dict(r) for r in con.execute(
+                    "SELECT id,symbol,price,currency,recorded_at FROM quotes WHERE user_id=? ORDER BY id DESC LIMIT 30", (uid,)).fetchall()],
+            }
+        if not any(evidence.values()):
+            raise HTTPException(409, "Record a journal entry or price snapshot before analysis")
+        try:
+            report = await analyze_evidence(evidence)
+        except RuntimeError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        except Exception:
+            # Do not expose model provider credentials or user journal text in errors.
+            raise HTTPException(502, "Analysis provider unavailable or returned invalid data")
+        with db() as con:
+            report_id = con.execute(
+                "INSERT INTO analysis_reports(user_id,model,report_json,created_at) VALUES(?,?,?,?)",
+                (uid, os.getenv("LLM_MODEL", "gpt-4o-mini"), report.model_dump_json(), now())
+            ).lastrowid
+        return {"id": report_id, "analysis": report.model_dump(), "source_counts": {k: len(v) for k,v in evidence.items()}}
+
+    @app.get("/api/intelligence/history")
+    def intelligence_history(uid=Depends(user)):
+        with db() as con:
+            rows = con.execute(
+                "SELECT id,model,report_json,created_at FROM analysis_reports WHERE user_id=? ORDER BY id DESC LIMIT 10", (uid,)
+            ).fetchall()
+        return {"reports": [{"id": r["id"], "model": r["model"], "created_at": r["created_at"],
+                             "analysis": json.loads(r["report_json"])} for r in rows]}
 
     @app.get("/health/ready")
     def ready():
