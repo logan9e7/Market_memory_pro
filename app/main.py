@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field, field_validator
 from app.database import IntegrityErrors, PostgresConnection
 from app.intelligence import analyze_evidence
 from app.schema import SCHEMA
+from app.retention import RETENTION
 
 ROOT = Path(__file__).resolve().parent.parent
 MIN_REVIEWS = 10
@@ -689,6 +690,14 @@ def create_app(db_path=None):
                           and prior[k]["observation"] != current[k]["observation"]],
             "notice": "Changes in LLM descriptions are not proof of behavior change. Verify against source records."
         }
+
+    @app.get("/api/account/retention")
+    def retention_settings(uid=Depends(user)):
+        return {"raw_days": RETENTION.raw_days, "summary_days": RETENTION.summary_days,
+                "deletion_mode": RETENTION.deletion_mode,
+                "preserve_active_strategy_evidence": RETENTION.preserve_active_strategy_evidence,
+                "deletion_enabled": RETENTION.deletion_enabled,
+                "notice": "Retention is configured; no data will be deleted until verified archival and approval are implemented."}
 
     @app.get("/health/ready")
     def ready():
