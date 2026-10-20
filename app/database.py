@@ -40,8 +40,16 @@ class PostgresConnection:
         from pathlib import Path
         ca_pem = os.getenv("DATABASE_SSL_ROOT_CERT", "").strip()
         if ca_pem:
-            if not ca_pem.startswith("-----BEGIN CERTIFICATE-----"):
-                raise ValueError("DATABASE_SSL_ROOT_CERT must contain a PEM certificate")
+            # Render environment fields may preserve quotes or escaped newlines.
+            if len(ca_pem) >= 2 and ca_pem[0] == ca_pem[-1] and ca_pem[0] in ("'", '"'):
+                ca_pem = ca_pem[1:-1].strip()
+            ca_pem = ca_pem.replace("\\n", "\n").replace("\\r", "").strip()
+            if not (ca_pem.startswith("-----BEGIN CERTIFICATE-----")
+                    and ca_pem.endswith("-----END CERTIFICATE-----")):
+                raise ValueError(
+                    "DATABASE_SSL_ROOT_CERT must contain the full PEM certificate, "
+                    "including BEGIN CERTIFICATE and END CERTIFICATE lines"
+                )
             with tempfile.TemporaryDirectory(prefix="market-memory-ca-") as folder:
                 ca_file = Path(folder) / "root.crt"
                 ca_file.write_text(ca_pem + "\n", encoding="utf-8")
