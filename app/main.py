@@ -20,6 +20,14 @@ from app.database import IntegrityErrors, PostgresConnection
 
 ROOT = Path(__file__).resolve().parent.parent
 MIN_REVIEWS = 10
+MIN_WIN_RATE_PERCENT = 70
+QUOTE_FRESHNESS_SECONDS = 15 * 60
+SESSION_DAYS = 7
+SESSION_MAX_AGE_SECONDS = SESSION_DAYS * 24 * 60 * 60
+PASSWORD_HASH_ITERATIONS = 600_000
+AUTH_WINDOW_MINUTES = 5
+AUTH_IP_ATTEMPTS = 30
+AUTH_USER_ATTEMPTS = 10
 
 
 def now():
@@ -118,6 +126,8 @@ CREATE TABLE IF NOT EXISTS paper_orders(id INTEGER PRIMARY KEY,user_id INTEGER N
 CREATE TABLE IF NOT EXISTS audit_events(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),kind TEXT NOT NULL,entity_id INTEGER,details TEXT NOT NULL,recorded_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS decisions_owner ON decisions(user_id,id DESC);
 CREATE INDEX IF NOT EXISTS snapshots_owner ON snapshots(user_id,id DESC);
+CREATE TABLE IF NOT EXISTS lab_ideas(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),title TEXT NOT NULL,hypothesis TEXT NOT NULL,symbol TEXT NOT NULL,timeframe TEXT NOT NULL,visibility TEXT NOT NULL DEFAULT 'private',status TEXT NOT NULL DEFAULT 'draft',created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS lab_notes(id INTEGER PRIMARY KEY,idea_id INTEGER NOT NULL REFERENCES lab_ideas(id),user_id INTEGER NOT NULL REFERENCES users(id),role TEXT NOT NULL,content TEXT NOT NULL,created_at TEXT NOT NULL);
 """
 
 
@@ -196,21 +206,21 @@ def create_app(db_path=None):
     def issue_session(con, uid, response, request):
         token = secrets.token_urlsafe(32)
         con.execute("DELETE FROM sessions WHERE expires_at<?", (now(),))
-        con.execute("INSERT INTO sessions VALUES(?,?,?)", (hashlib.sha256(token.encode()).hexdigest(), uid, (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()))
-        response.set_cookie("mm_session", token, httponly=True, samesite="strict", secure=request.url.scheme == "https" or os.getenv("MARKET_MEMORY_SECURE_COOKIE") == "1", max_age=604800)
+        con.execute("INSERT INTO sessions VALUES(?,?,?)", (hashlib.sha256(token.encode()).hexdigest(), uid, (datetime.now(timezone.utc) + timedelta(days=SESSION_DAYS)).isoformat()))
+        response.set_cookie("mm_session", token, httponly=True, samesite="strict", secure=request.url.scheme == "https" or os.getenv("MARKET_MEMORY_SECURE_COOKIE") == "1", max_age=SESSION_MAX_AGE_SECONDS)
 
     def password_hash(password, salt=None):
         salt = salt or secrets.token_hex(16)
-        return salt + ":" + hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 600000).hex()
+        return salt + ":" + hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), PASSWORD_HASH_ITERATIONS).hex()
 
     def auth_budget(request, username):
         ip = request.client.host if request.client else "unknown"
         keys = [hashlib.sha256(("ip:" + ip).encode()).hexdigest(), hashlib.sha256(("user:" + username.lower()).encode()).hexdigest()]
-        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=AUTH_WINDOW_MINUTES)).isoformat()
         with db() as con:
             con.execute("BEGIN IMMEDIATE")
             con.execute("DELETE FROM auth_attempts WHERE recorded_at<?", (cutoff,))
-            blocked = any(con.execute("SELECT COUNT(*) FROM auth_attempts WHERE key=?", (key,)).fetchone()[0] >= limit for key, limit in zip(keys, (30, 10)))
+            blocked = any(con.execute("SELECT COUNT(*) FROM auth_attempts WHERE key=?", (key,)).fetchone()[0] >= limit for key, limit in zip(keys, (AUTH_IP_ATTEMPTS, AUTH_USER_ATTEMPTS)))
             if not blocked:
                 con.executemany("INSERT INTO auth_attempts VALUES(?,?)", [(key, now()) for key in keys])
         if blocked:
@@ -279,7 +289,7 @@ def create_app(db_path=None):
     def stats(con, strategy_id):
         row = con.execute("SELECT SUM(CASE WHEN outcome='win' THEN 1 ELSE 0 END) AS wins,COUNT(outcome) AS completed,COUNT(*) AS total FROM decisions WHERE strategy_id=?", (strategy_id,)).fetchone()
         wins, completed = row["wins"] or 0, row["completed"]
-        return {"wins": wins, "completed": completed, "total": row["total"], "win_rate": round(wins / completed * 100, 2) if completed else None, "eligible": completed >= MIN_REVIEWS and wins * 100 >= completed * 70}
+        return {"wins": wins, "completed": completed, "total": row["total"], "win_rate": round(wins / completed * 100, 2) if completed else None, "eligible": completed >= MIN_REVIEWS and wins * 100 >= completed * MIN_WIN_RATE_PERCENT}
 
     def latest(con, uid, symbol, currency=None):
         if currency:
@@ -291,7 +301,7 @@ def create_app(db_path=None):
         return price >= threshold if rule["condition"] == "above" else price <= threshold
 
     def fresh(quote):
-        return quote and (datetime.now(timezone.utc) - datetime.fromisoformat(quote["recorded_at"])).total_seconds() <= 900
+        return quote and (datetime.now(timezone.utc) - datetime.fromisoformat(quote["recorded_at"])).total_seconds() <= QUOTE_FRESHNESS_SECONDS
 
     def evaluate(con, uid, quote):
         for alert in con.execute("SELECT * FROM alerts WHERE user_id=? AND symbol=? AND currency=? AND active=1", (uid, quote["symbol"], quote["currency"])).fetchall():
@@ -448,19 +458,6 @@ def create_app(db_path=None):
             result.update(username=con.execute("SELECT username FROM users WHERE id=?", (uid,)).fetchone()[0], strategies=strategies, minimum_reviews=MIN_REVIEWS, execution_mode="paper")
         return result
 
-
-    # Strategy Lab: persistent user-owned research drafts. No automated trade execution.
-    lab_id_type = "INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY" if postgres_url else "INTEGER PRIMARY KEY"
-    with db() as con:
-        con.execute(f"""CREATE TABLE IF NOT EXISTS lab_ideas(
-            id {lab_id_type}, user_id INTEGER NOT NULL REFERENCES users(id),
-            title TEXT NOT NULL, hypothesis TEXT NOT NULL, symbol TEXT NOT NULL,
-            timeframe TEXT NOT NULL, visibility TEXT NOT NULL DEFAULT 'private',
-            status TEXT NOT NULL DEFAULT 'draft', created_at TEXT NOT NULL)""")
-        con.execute(f"""CREATE TABLE IF NOT EXISTS lab_notes(
-            id {lab_id_type}, idea_id INTEGER NOT NULL REFERENCES lab_ideas(id),
-            user_id INTEGER NOT NULL REFERENCES users(id), role TEXT NOT NULL,
-            content TEXT NOT NULL, created_at TEXT NOT NULL)""")
 
     class LabIdea(BaseModel):
         title: str = Field(min_length=3, max_length=120)
