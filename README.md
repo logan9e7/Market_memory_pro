@@ -72,3 +72,15 @@ Centralized in `app/main.py` (no database rows are needed for these constants):
 
 Strategy Lab table definitions now live in the SQLite/PostgreSQL schema initialization rather than a separate request-startup DDL block. Database values remain user-owned records, not compressed into policy constants. Changing constants affects behavior globally and should be accompanied by regression tests. PostgreSQL migrations are repeatable and must not delete existing user data.
 
+
+## Optional five-level AI Insights
+
+The **AI Insights** tab calls `POST /api/intelligence/analyze` only on demand. It sends up to 30 recent snapshots, 30 decisions and 30 price observations to a configured OpenAI-compatible LLM, validates the five-level JSON response, checks cited evidence IDs, and saves the result privately in `analysis_reports`. `GET /api/intelligence/history` returns the 10 latest reports. No LLM is needed to record data or use existing journal functions.
+
+Configure server-side Render environment variables (never put API keys in frontend JavaScript):
+
+- `LLM_API_KEY`: provider API key (required for AI analysis)
+- `LLM_MODEL`: model supporting chat completions and JSON mode (default `gpt-4o-mini`)
+- `LLM_BASE_URL`: HTTPS OpenAI-compatible API base (default `https://api.openai.com/v1`)
+
+**Privacy and limits:** User journals and trading notes leave your server when you request analysis. Check your provider's data-retention policy. Reports are interpretations, not verified performance metrics or investment recommendations. An empty result means insufficient evidence; no invented observations. The core journal remains available without an API key. API calls may incur provider charges; this feature is not guaranteed free.
