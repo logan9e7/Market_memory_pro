@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS paper_orders(id BIGSERIAL PRIMARY KEY,user_id BIGINT 
 CREATE TABLE IF NOT EXISTS audit_events(id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id),kind TEXT NOT NULL,entity_id INTEGER,details TEXT NOT NULL,recorded_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS decisions_owner ON decisions(user_id,id DESC);
 CREATE INDEX IF NOT EXISTS snapshots_owner ON snapshots(user_id,id DESC);
+CREATE TABLE IF NOT EXISTS analysis_reports(id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id),model TEXT NOT NULL,report_json TEXT NOT NULL,created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS analysis_reports_owner ON analysis_reports(user_id,id DESC);
 CREATE TABLE IF NOT EXISTS lab_ideas(id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id),title TEXT NOT NULL,hypothesis TEXT NOT NULL,symbol TEXT NOT NULL,timeframe TEXT NOT NULL,visibility TEXT NOT NULL DEFAULT 'private',status TEXT NOT NULL DEFAULT 'draft',created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS lab_notes(id BIGSERIAL PRIMARY KEY,idea_id BIGINT NOT NULL REFERENCES lab_ideas(id),user_id BIGINT NOT NULL REFERENCES users(id),role TEXT NOT NULL,content TEXT NOT NULL,created_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS lab_ideas_owner ON lab_ideas(user_id,id DESC);
@@ -38,10 +40,11 @@ ALTER TABLE paper_orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lab_ideas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lab_notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE analysis_reports ENABLE ROW LEVEL SECURITY;
 DO $$ DECLARE role_name text; table_name text; BEGIN
  FOREACH role_name IN ARRAY ARRAY['anon','authenticated'] LOOP
   IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname=role_name) THEN
-   FOREACH table_name IN ARRAY ARRAY['users','sessions','auth_attempts','quotes','visits','snapshots','strategies','decisions','alerts','opportunities','paper_orders','audit_events','lab_ideas','lab_notes'] LOOP
+   FOREACH table_name IN ARRAY ARRAY['users','sessions','auth_attempts','quotes','visits','snapshots','strategies','decisions','alerts','opportunities','paper_orders','audit_events','lab_ideas','lab_notes','analysis_reports'] LOOP
     EXECUTE format('REVOKE ALL ON TABLE %I FROM %I',table_name,role_name);
    END LOOP;
   END IF;
