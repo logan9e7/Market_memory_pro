@@ -53,3 +53,22 @@ Keep this development service on loopback until deployment hardening is complete
 No real broker execution exists. Connecting one requires a chosen broker, sandbox validation, account authorization, explicit symbol mapping, order type/quantity/notional limits, risk controls, fresh provider quotes and broker-side idempotency. A historical win rate alone is not an execution rule.
 
 The next product step is connecting a market provider to visit capture and opportunity checks while retaining the distinction between current provider data and a user's recorded observation. Free-text strategy assistance can then propose editable rules that the user confirms before detection.
+
+## Backend policy parameters
+
+Centralized in `app/main.py` (no database rows are needed for these constants):
+
+| Parameter | Default | Purpose |
+| --- | ---: | --- |
+| `MIN_REVIEWS` | 10 | Minimum completed strategy reviews |
+| `MIN_WIN_RATE_PERCENT` | 70 | Minimum observed strategy win percentage |
+| `QUOTE_FRESHNESS_SECONDS` | 900 | Maximum quote age before approval |
+| `SESSION_DAYS` | 7 | Session lifetime in days |
+| `SESSION_MAX_AGE_SECONDS` | 604800 | Cookie lifetime, derived from session days |
+| `PASSWORD_HASH_ITERATIONS` | 600000 | PBKDF2 password hashing cost |
+| `AUTH_WINDOW_MINUTES` | 5 | Authentication rate-limit window |
+| `AUTH_IP_ATTEMPTS` | 30 | Attempts per IP per window |
+| `AUTH_USER_ATTEMPTS` | 10 | Attempts per username per window |
+
+Strategy Lab table definitions now live in the SQLite/PostgreSQL schema initialization rather than a separate request-startup DDL block. Database values remain user-owned records, not compressed into policy constants. Changing constants affects behavior globally and should be accompanied by regression tests. PostgreSQL migrations are repeatable and must not delete existing user data.
+
