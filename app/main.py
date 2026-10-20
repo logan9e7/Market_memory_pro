@@ -629,18 +629,21 @@ def create_app(db_path=None):
         return {"provider":"alpaca","feed":"iex","symbol":symbol,"data":response.json(),
             "notice":"Free IEX feed is not a consolidated US market feed."}
 
+    # Single source of truth for LLM evidence selection and limits.
+    EVIDENCE_LIMIT = 30
+    REPORT_HISTORY_LIMIT = 10
+    EVIDENCE_QUERIES = {
+        "snapshots": "SELECT id,symbol,price,currency,note,kind,recorded_at FROM snapshots WHERE user_id=? ORDER BY id DESC LIMIT ?",
+        "decisions": "SELECT d.id,d.price,d.note,d.outcome,d.lesson,d.recorded_at,s.symbol,s.setup,s.side,s.condition,s.trigger_price FROM decisions d JOIN strategies s ON d.strategy_id=s.id WHERE d.user_id=? ORDER BY d.id DESC LIMIT ?",
+        "quotes": "SELECT id,symbol,price,currency,recorded_at FROM quotes WHERE user_id=? ORDER BY id DESC LIMIT ?",
+    }
+
     @app.post("/api/intelligence/analyze")
     async def intelligence_analyze(uid=Depends(user)):
         """Analyze only this user's recent evidence; never send passwords or tokens."""
         with db() as con:
-            evidence = {
-                "snapshots": [dict(r) for r in con.execute(
-                    "SELECT id,symbol,price,currency,note,kind,recorded_at FROM snapshots WHERE user_id=? ORDER BY id DESC LIMIT 30", (uid,)).fetchall()],
-                "decisions": [dict(r) for r in con.execute(
-                    "SELECT d.id,d.price,d.note,d.outcome,d.lesson,d.recorded_at,s.symbol,s.setup,s.side,s.condition,s.trigger_price FROM decisions d JOIN strategies s ON d.strategy_id=s.id WHERE d.user_id=? ORDER BY d.id DESC LIMIT 30", (uid,)).fetchall()],
-                "quotes": [dict(r) for r in con.execute(
-                    "SELECT id,symbol,price,currency,recorded_at FROM quotes WHERE user_id=? ORDER BY id DESC LIMIT 30", (uid,)).fetchall()],
-            }
+            evidence = {name: [dict(row) for row in con.execute(sql, (uid, EVIDENCE_LIMIT)).fetchall()]
+                        for name, sql in EVIDENCE_QUERIES.items()}
         if not any(evidence.values()):
             raise HTTPException(409, "Record a journal entry or price snapshot before analysis")
         try:
@@ -661,7 +664,7 @@ def create_app(db_path=None):
     def intelligence_history(uid=Depends(user)):
         with db() as con:
             rows = con.execute(
-                "SELECT id,model,report_json,created_at FROM analysis_reports WHERE user_id=? ORDER BY id DESC LIMIT 10", (uid,)
+                "SELECT id,model,report_json,created_at FROM analysis_reports WHERE user_id=? ORDER BY id DESC LIMIT ?", (uid, REPORT_HISTORY_LIMIT)
             ).fetchall()
         return {"reports": [{"id": r["id"], "model": r["model"], "created_at": r["created_at"],
                              "analysis": json.loads(r["report_json"])} for r in rows]}
