@@ -31,7 +31,7 @@ class Cursor:
 
 
 class PostgresConnection:
-    INSERT_ID_TABLES = {"users", "audit_events", "quotes", "snapshots", "visits", "decisions", "alerts", "opportunities", "paper_orders"}
+    INSERT_ID_TABLES = {"users", "audit_events", "quotes", "snapshots", "visits", "decisions", "alerts", "opportunities", "paper_orders", "lab_ideas", "lab_notes", "analysis_reports"}
 
     def __init__(self, url):
         # A trusted CA must verify Supabase's certificate and hostname.
