@@ -485,10 +485,11 @@ def create_app(db_path=None):
                 FROM decisions d JOIN strategies s ON s.id=d.strategy_id
                 WHERE d.user_id=? AND s.symbol=? ORDER BY d.id DESC LIMIT 100""",
                 (uid,idea["symbol"])).fetchall()
-        words=set(w.lower() for w in (idea["title"]+" "+idea["hypothesis"]).split() if len(w)>3)
-        ranked=sorted((dict(d) for d in decisions),key=lambda d:sum(w in (d["note"]+" "+d["setup"]).lower() for w in words),reverse=True)
-        return {"method":"symbol-filtered lexical retrieval","evidence":ranked[:10],
-                "limitations":"Not semantic RAG, not a backtest, and not a predictive success rate."}
+        # Keep this endpoint as an explicit evidence retriever, not a second AI analyst.
+        # The shared LLM engine can interpret these records after retrieval.
+        return {"method": "symbol-filtered recent evidence",
+                "evidence": [dict(row) for row in decisions[:10]],
+                "limitations": "Recent records only; not ranked for relevance or statistically validated."}
 
 
     # Read-only research endpoints. Credentials stay server-side; never execute orders.
