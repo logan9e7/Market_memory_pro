@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS audit_events(id BIGSERIAL PRIMARY KEY,user_id BIGINT 
 CREATE INDEX IF NOT EXISTS decisions_owner ON decisions(user_id,id DESC);
 CREATE INDEX IF NOT EXISTS snapshots_owner ON snapshots(user_id,id DESC);
 
-CREATE OR REPLACE FUNCTION mm_prevent_snapshot_update() RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $ BEGIN RAISE EXCEPTION 'Snapshots are immutable' USING ERRCODE='23514'; END $;
+CREATE OR REPLACE FUNCTION mm_prevent_snapshot_update() RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS 'BEGIN RAISE EXCEPTION ''Snapshots are immutable'' USING ERRCODE=''23514''; END';
 DROP TRIGGER IF EXISTS snapshot_no_update ON snapshots;
 CREATE TRIGGER snapshot_no_update BEFORE UPDATE ON snapshots FOR EACH ROW EXECUTE FUNCTION mm_prevent_snapshot_update();
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
