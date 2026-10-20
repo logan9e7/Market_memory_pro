@@ -99,3 +99,35 @@ $('#market-form').addEventListener('submit',event=>{event.preventDefault();submi
 
 $('#password-form').addEventListener('submit',event=>{event.preventDefault();submit(event.target,async()=>{if(!confirm('Changing your password signs out every device. Continue?'))return;await api('auth/change-password',fields(event.target));event.target.reset();showAuth();notice('Password updated. Sign in with your new password.');});});
 $('#logout-all').addEventListener('click',async()=>{if(!confirm('Revoke every active session?'))return;try{await api('auth/logout-all',{});showAuth();notice('All sessions revoked.');}catch(err){notice(err.message,true);}});
+
+function renderIntelligence(report) {
+  const analysis = report.analysis || {};
+  const groups = [
+    ['Level 1 · Evidence', 'level_1_evidence'],
+    ['Level 2 · Quantitative', 'level_2_quantitative'],
+    ['Level 3 · Behavior', 'level_3_behavior'],
+    ['Level 4 · Hypotheses', 'level_4_hypotheses'],
+    ['Level 5 · Adaptation', 'level_5_adaptation']
+  ];
+  $('#intelligence-result').innerHTML = groups.map(([title,key]) => {
+    const items = analysis[key] || [];
+    return '<section class="panel"><h3>'+e(title)+'</h3>' +
+      (items.length ? items.map(item => '<p><strong>'+e(item.parameter || item.statement)+'</strong> — '+
+        e(item.observation || item.test_next || '')+
+        (item.evidence_ids?.length ? ' <small>Evidence IDs: '+e(item.evidence_ids.join(', '))+'</small>' : '')+
+        '</p>').join('') : '<p class="muted">Not enough evidence yet.</p>')+'</section>';
+  }).join('') + '<p class="muted">'+(analysis.limitations||[]).map(e).join(' · ')+'</p>';
+}
+$('#analyze-memory').addEventListener('click', async event => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  $('#intelligence-result').textContent = 'Analyzing recent evidence…';
+  try {
+    const report = await api('intelligence/analyze', {});
+    renderIntelligence(report);
+    notice('Analysis saved to your private history.');
+  } catch (err) {
+    $('#intelligence-result').textContent = err.message;
+    notice(err.message, true);
+  } finally { button.disabled = false; }
+});
