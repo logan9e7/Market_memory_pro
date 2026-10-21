@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.18)
+project(market_memory_quant LANGUAGES CXX)
+find_package(pybind11 CONFIG REQUIRED)
+pybind11_add_module(_quant_core quant_core.cpp)
+target_compile_features(_quant_core PRIVATE cxx_std_17)
