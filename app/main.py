@@ -25,6 +25,8 @@ from app.api_lab import make_lab_router
 from app.api_quant import make_quant_router
 from app.api_markets import make_markets_router
 from app.api_intelligence import make_intelligence_router
+from app.db_runtime import create_database
+from app.strategy_engine import make_strategy_engine
 from app.database import IntegrityErrors, PostgresConnection
 from app.schema import SCHEMA
 
@@ -36,35 +38,7 @@ def now():
 
 
 def create_app(db_path=None):
-    postgres_url = os.getenv("DATABASE_URL") if db_path is None else None
-    database = Path(db_path or os.getenv("MARKET_MEMORY_DB", str(ROOT / ".data" / "memory.sqlite3")))
-    if not postgres_url:
-        database.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-
-    @contextmanager
-    def db():
-        if postgres_url:
-            con = PostgresConnection(postgres_url)
-        else:
-            con = sqlite3.connect(database, timeout=10)
-            database.chmod(0o600)
-            con.row_factory = sqlite3.Row
-            con.execute("PRAGMA foreign_keys=ON")
-        try:
-            yield con
-            con.commit()
-        except Exception:
-            con.rollback()
-            raise
-        finally:
-            con.close()
-
-    with db() as con:
-        if postgres_url:
-            con.initialize((ROOT / "migrations" / "001_postgres.sql").read_text())
-        else:
-            con.execute("PRAGMA journal_mode=WAL")
-            con.executescript(SCHEMA)
+    db = create_database(ROOT, db_path)
 
     app = FastAPI(title="Market Memory Pro", version="0.1.0")
 
@@ -109,39 +83,7 @@ def create_app(db_path=None):
 
     app.include_router(make_auth_router(db, user, audit, now))
 
-    def stats(con, strategy_id):
-        row = con.execute("SELECT SUM(CASE WHEN outcome='win' THEN 1 ELSE 0 END) AS wins,COUNT(outcome) AS completed,COUNT(*) AS total FROM decisions WHERE strategy_id=?", (strategy_id,)).fetchone()
-        wins, completed = row["wins"] or 0, row["completed"]
-        return {"wins": wins, "completed": completed, "total": row["total"], "win_rate": round(wins / completed * 100, 2) if completed else None, "eligible": completed >= MIN_REVIEWS and wins * 100 >= completed * MIN_WIN_RATE_PERCENT}
-
-    def latest(con, uid, symbol, currency=None):
-        if currency:
-            return con.execute("SELECT * FROM quotes WHERE user_id=? AND symbol=? AND currency=? ORDER BY id DESC LIMIT 1", (uid, symbol, currency)).fetchone()
-        return con.execute("SELECT * FROM quotes WHERE user_id=? AND symbol=? ORDER BY id DESC LIMIT 1", (uid, symbol)).fetchone()
-
-    def matches(rule, price):
-        threshold = rule["trigger_price"] if "trigger_price" in rule.keys() else rule["target"]
-        return price >= threshold if rule["condition"] == "above" else price <= threshold
-
-    def fresh(quote):
-        return quote and (datetime.now(timezone.utc) - datetime.fromisoformat(quote["recorded_at"])).total_seconds() <= QUOTE_FRESHNESS_SECONDS
-
-    def evaluate(con, uid, quote):
-        for alert in con.execute("SELECT * FROM alerts WHERE user_id=? AND symbol=? AND currency=? AND active=1", (uid, quote["symbol"], quote["currency"])).fetchall():
-            if matches(alert, quote["price"]):
-                con.execute("UPDATE alerts SET active=0,triggered_at=?,quote_id=? WHERE id=?", (now(), quote["id"], alert["id"]))
-                audit(con, uid, "alert_triggered", alert["id"], {"quote_id": quote["id"]})
-        for strategy in con.execute("SELECT * FROM strategies WHERE user_id=? AND symbol=? AND currency=?", (uid, quote["symbol"], quote["currency"])).fetchall():
-            score = stats(con, strategy["id"])
-            matching = matches(strategy, quote["price"]) and score["eligible"] and fresh(quote)
-            if not matching:
-                con.execute("UPDATE opportunities SET status='expired',decided_at=? WHERE strategy_id=? AND status='pending'", (now(), strategy["id"]))
-            if matching and not strategy["was_matching"]:
-                episode = strategy["episode"] + 1
-                con.execute("UPDATE strategies SET episode=? WHERE id=?", (episode, strategy["id"]))
-                oid = con.execute("INSERT INTO opportunities(user_id,strategy_id,quote_id,episode,wins,completed,recorded_at) VALUES(?,?,?,?,?,?,?)", (uid, strategy["id"], quote["id"], episode, score["wins"], score["completed"], now())).lastrowid
-                audit(con, uid, "approval_requested", oid, {"quote_id": quote["id"], "win_rate": score["win_rate"]})
-            con.execute("UPDATE strategies SET was_matching=? WHERE id=?", (int(matching), strategy["id"]))
+    stats, latest, matches, fresh, evaluate = make_strategy_engine(now, audit)
 
     app.include_router(make_journal_router(db, user, now, audit, evaluate, latest))
 
@@ -155,10 +97,17 @@ def create_app(db_path=None):
 
     app.include_router(make_intelligence_router(user, db, now))
 
+    @app.get("/health/live", include_in_schema=False)
+    def live():
+        return {"status": "alive"}
+
     @app.get("/health/ready")
     def ready():
-        with db() as con:
-            con.execute("SELECT 1 FROM users LIMIT 1").fetchall()
+        try:
+            with db() as con:
+                con.execute("SELECT 1 FROM users LIMIT 1").fetchall()
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="Database unavailable") from exc
         return {"status": "ready", "database": "reachable", "execution_mode": "paper"}
 
     @app.get("/")
