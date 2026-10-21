@@ -1,23 +1,15 @@
-"""User-owned market evidence and explicit, paper-only strategy execution."""
+"""FastAPI composition root: auth, security middleware and registered routers."""
 import hashlib
-import hmac
 import json
 import os
-import secrets
-import sqlite3
-from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, field_validator
 
-from app.models import Credentials, RegistrationCredentials, PasswordChange, Quote, Snapshot, Visit, Decision, Review, Alert
-from app.config import MIN_REVIEWS, MIN_WIN_RATE_PERCENT, QUOTE_FRESHNESS_SECONDS
 from app.api_auth import make_auth_router
 from app.api_journal import make_journal_router
 from app.api_strategy import make_strategy_router
@@ -27,8 +19,6 @@ from app.api_markets import make_markets_router
 from app.api_intelligence import make_intelligence_router
 from app.db_runtime import create_database
 from app.strategy_engine import make_strategy_engine
-from app.database import IntegrityErrors, PostgresConnection
-from app.schema import SCHEMA
 
 ROOT = Path(__file__).resolve().parent.parent
 
