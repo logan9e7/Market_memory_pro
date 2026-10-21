@@ -18,7 +18,7 @@ class WorkflowTests(unittest.TestCase):
         self.path = Path(self.directory.name) / "test.sqlite3"
         self.app = create_app(self.path)
         self.client = TestClient(self.app)
-        self.client.post("/api/register", json={"username": "researcher", "password": "correct-long-password"})
+        self.client.post("/api/register", json={"username": "researcher", "password": "Correct-long-password1!"})
 
     def tearDown(self):
         self.client.close()
@@ -117,7 +117,7 @@ class WorkflowTests(unittest.TestCase):
         state = self.state()
         other = TestClient(self.app)
         self.addCleanup(other.close)
-        other.post("/api/register", json={"username":"other-user", "password":"another-long-password"})
+        other.post("/api/register", json={"username":"other-user", "password":"Another-long-password1!"})
         self.assertEqual(other.get("/api/state").json()["decisions"], [])
         response = other.post(f"/api/decisions/{state['decisions'][0]['id']}/review",json={"outcome":"win","lesson":"Attempt overwrite"})
         self.assertEqual(response.status_code,404)
@@ -193,7 +193,7 @@ class WorkflowTests(unittest.TestCase):
         self.client.post("/api/logout",json={})
         response=self.client.post("/api/login",json={"username":"researcher","password":"wrong-long-password"})
         self.assertEqual(response.status_code,401)
-        response=self.client.post("/api/login",json={"username":"researcher","password":"correct-long-password"})
+        response=self.client.post("/api/login",json={"username":"researcher","password":"Correct-long-password1!"})
         self.assertEqual(response.status_code,200)
         self.assertIn("HttpOnly",response.headers["set-cookie"])
         self.assertEqual(self.state()["quotes"][0]["price"],101)
