@@ -20,6 +20,9 @@ from app.database import IntegrityErrors, PostgresConnection
 from app.intelligence import analyze_evidence
 from app.schema import SCHEMA
 from app.retention import RETENTION
+from app.api_quant import make_quant_router
+from app.api_markets import make_markets_router
+from app.api_intelligence import make_intelligence_router
 from app.evidence import load_evidence, retention_preview
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -511,196 +514,11 @@ def create_app(db_path=None):
                 "limitations": "Recent records only; not ranked for relevance or statistically validated."}
 
 
-    # Read-only research endpoints. Credentials stay server-side; never execute orders.
-    class TradeSample(BaseModel):
-        returns: list[float] = Field(min_length=1,max_length=10000)
-        @field_validator("returns")
-        @classmethod
-        def valid_returns(cls, values):
-            if any(not -1 < x < 1000 for x in values):
-                raise ValueError("Returns must be finite decimal fractions greater than -100%")
-            return values
+    app.include_router(make_quant_router(user))
 
-    class OptionModel(BaseModel):
-        spot: float = Field(gt=0,allow_inf_nan=False)
-        strike: float = Field(gt=0,allow_inf_nan=False)
-        years: float = Field(gt=0,le=30,allow_inf_nan=False)
-        rate: float = Field(ge=-1,le=2,allow_inf_nan=False)
-        volatility: float = Field(gt=0,le=10,allow_inf_nan=False)
-        kind: Literal["call","put"]
+    app.include_router(make_markets_router(user))
 
-    @app.post("/api/quant/trades")
-    def quant_trades(payload: TradeSample, uid=Depends(user)):
-        from app.quant import trade_stats
-        return trade_stats(payload.returns)
-
-    @app.post("/api/quant/option")
-    def quant_option(payload: OptionModel, uid=Depends(user)):
-        from app.quant import black_scholes
-        return black_scholes(**payload.model_dump())
-
-    @app.get("/api/markets/providers")
-    def market_providers(uid=Depends(user)):
-        return {"markets":[
-            {"market":"crypto_spot","provider":"binance","available":True,"authentication":"public"},
-            {"market":"india_equities_and_fo","provider":"upstox","available":bool(os.getenv("UPSTOX_ACCESS_TOKEN")),"authentication":"server_token"},
-            {"market":"us_equities","provider":"alpaca","available":bool(os.getenv("ALPACA_API_KEY") and os.getenv("ALPACA_SECRET_KEY")),"authentication":"server_keys"}],
-            "execution":"disabled","notice":"Provider entitlements, geographic availability and data licensing apply."}
-
-    @app.get("/api/markets/crypto/candles")
-    async def crypto_candles(symbol: str="BTCUSDT", interval: Literal["15m","1h","4h","1d"]="4h", limit: int=100, uid=Depends(user)):
-        import re
-        import httpx
-        if not re.fullmatch(r"[A-Z0-9]{3,20}",symbol) or not 1<=limit<=500:
-            raise HTTPException(422,"Invalid symbol or limit")
-        try:
-            async with httpx.AsyncClient(timeout=8.0) as client:
-                response=await client.get("https://data-api.binance.vision/api/v3/klines",
-                    params={"symbol":symbol,"interval":interval,"limit":limit})
-            response.raise_for_status()
-        except httpx.HTTPError:
-            raise HTTPException(503,"Crypto market provider temporarily unavailable")
-        return {"provider":"binance","market":"crypto_spot","symbol":symbol,"interval":interval,
-            "candles":[{"timestamp_ms":r[0],"open":float(r[1]),"high":float(r[2]),
-                        "low":float(r[3]),"close":float(r[4]),"volume":float(r[5])} for r in response.json()],
-            "notice":"Exchange-provided data, not investment advice."}
-
-
-    @app.get("/api/markets/india/candles")
-    async def india_candles(instrument_key: str, unit: Literal["minutes","hours","days"]="days",
-        interval: int=1, to_date: str="", from_date: str="", uid=Depends(user)):
-        import re
-        import httpx
-        token=os.getenv("UPSTOX_ACCESS_TOKEN")
-        if not token: raise HTTPException(503,"Upstox credentials not configured")
-        if not re.fullmatch(r"[A-Z_]+\\|[A-Za-z0-9 ._-]{1,90}",instrument_key):
-            raise HTTPException(422,"Invalid instrument key")
-        if not (1<=interval<=300) or not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",to_date) or not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",from_date):
-            raise HTTPException(422,"Invalid interval or date")
-        from urllib.parse import quote
-        url=f"https://api.upstox.com/v3/historical-candle/{quote(instrument_key,safe='')}/{unit}/{interval}/{to_date}/{from_date}"
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response=await client.get(url,headers={"Authorization":f"Bearer {token}","Accept":"application/json"})
-            response.raise_for_status()
-        except httpx.HTTPError:
-            raise HTTPException(502,"Upstox market data unavailable or access denied")
-        return {"provider":"upstox","instrument_key":instrument_key,"data":response.json().get("data",{}),
-            "notice":"Check instrument entitlements and market data redistribution rights."}
-
-    @app.get("/api/markets/india/option-chain")
-    async def india_option_chain(instrument_key: str, expiry_date: str, uid=Depends(user)):
-        import re
-        import httpx
-        token=os.getenv("UPSTOX_ACCESS_TOKEN")
-        if not token: raise HTTPException(503,"Upstox credentials not configured")
-        if not re.fullmatch(r"[A-Z_]+\\|[A-Za-z0-9 ._-]{1,90}",instrument_key) or not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",expiry_date):
-            raise HTTPException(422,"Invalid option-chain query")
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response=await client.get("https://api.upstox.com/v2/option/chain",
-                    params={"instrument_key":instrument_key,"expiry_date":expiry_date},
-                    headers={"Authorization":f"Bearer {token}","Accept":"application/json"})
-            response.raise_for_status()
-        except httpx.HTTPError:
-            raise HTTPException(502,"Upstox option chain unavailable or access denied")
-        return {"provider":"upstox","data":response.json().get("data",[]),
-            "notice":"Option Greeks and POP are vendor estimates, not guaranteed probabilities."}
-
-    @app.get("/api/markets/us/candles")
-    async def us_candles(symbol: str="AAPL", timeframe: Literal["1Hour","1Day"]="1Day",
-        limit: int=100, uid=Depends(user)):
-        import re
-        import httpx
-        key=os.getenv("ALPACA_API_KEY")
-        secret=os.getenv("ALPACA_SECRET_KEY")
-        if not key or not secret: raise HTTPException(503,"Alpaca market data credentials not configured")
-        if not re.fullmatch(r"[A-Z.]{1,12}",symbol) or not 1<=limit<=500:
-            raise HTTPException(422,"Invalid symbol or limit")
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response=await client.get(f"https://data.alpaca.markets/v2/stocks/{symbol}/bars",
-                    params={"timeframe":timeframe,"limit":limit,"feed":"iex"},
-                    headers={"APCA-API-KEY-ID":key,"APCA-API-SECRET-KEY":secret})
-            response.raise_for_status()
-        except httpx.HTTPError:
-            raise HTTPException(502,"Alpaca market data unavailable or access denied")
-        return {"provider":"alpaca","feed":"iex","symbol":symbol,"data":response.json(),
-            "notice":"Free IEX feed is not a consolidated US market feed."}
-
-    REPORT_HISTORY_LIMIT = 10
-
-    @app.post("/api/intelligence/analyze")
-    async def intelligence_analyze(uid=Depends(user)):
-        """Analyze only this user's recent evidence; never send passwords or tokens."""
-        with db() as con:
-            evidence = load_evidence(con, uid)
-        if not any(evidence.values()):
-            raise HTTPException(409, "Record a journal entry or price snapshot before analysis")
-        try:
-            report = await analyze_evidence(evidence)
-        except RuntimeError as exc:
-            raise HTTPException(503, str(exc)) from exc
-        except Exception:
-            # Do not expose model provider credentials or user journal text in errors.
-            raise HTTPException(502, "Analysis provider unavailable or returned invalid data")
-        with db() as con:
-            report_id = con.execute(
-                "INSERT INTO analysis_reports(user_id,model,report_json,created_at) VALUES(?,?,?,?)",
-                (uid, os.getenv("LLM_MODEL", "gpt-4o-mini"), report.model_dump_json(), now())
-            ).lastrowid
-        return {"id": report_id, "analysis": report.model_dump(), "source_counts": {k: len(v) for k,v in evidence.items()}}
-
-    @app.get("/api/intelligence/history")
-    def intelligence_history(uid=Depends(user)):
-        with db() as con:
-            rows = con.execute(
-                "SELECT id,model,report_json,created_at FROM analysis_reports WHERE user_id=? ORDER BY id DESC LIMIT ?", (uid, REPORT_HISTORY_LIMIT)
-            ).fetchall()
-        return {"reports": [{"id": r["id"], "model": r["model"], "created_at": r["created_at"],
-                             "analysis": json.loads(r["report_json"])} for r in rows]}
-
-    @app.get("/api/intelligence/evolution")
-    def intelligence_evolution(uid=Depends(user)):
-        """Compare evidence-backed parameter observations across the last two reports."""
-        with db() as con:
-            rows = con.execute(
-                "SELECT id,report_json,created_at FROM analysis_reports WHERE user_id=? ORDER BY id DESC LIMIT 2",
-                (uid,)).fetchall()
-        if len(rows) < 2:
-            return {"status": "insufficient_history", "required_reports": 2, "available": len(rows)}
-        recent, previous = (json.loads(row["report_json"]) for row in rows)
-        levels = ("level_1_evidence", "level_2_quantitative", "level_3_behavior", "level_5_adaptation")
-        def parameters(report):
-            return {(level, item["parameter"]): item for level in levels
-                    for item in report.get(level, []) if item.get("parameter")}
-        current, prior = parameters(recent), parameters(previous)
-        keys = current.keys() | prior.keys()
-        return {
-            "status": "compared",
-            "current_report_id": rows[0]["id"],
-            "previous_report_id": rows[1]["id"],
-            "added": [{"level": k[0], **current[k]} for k in sorted(keys) if k in current and k not in prior],
-            "missing": [{"level": k[0], **prior[k]} for k in sorted(keys) if k in prior and k not in current],
-            "revisited": [{"level": k[0], "parameter": k[1],
-                           "previous": prior[k]["observation"], "current": current[k]["observation"]}
-                          for k in sorted(keys) if k in prior and k in current
-                          and prior[k]["observation"] != current[k]["observation"]],
-            "notice": "Changes in LLM descriptions are not proof of behavior change. Verify against source records."
-        }
-
-    @app.get("/api/account/retention")
-    def retention_settings(uid=Depends(user)):
-        return {"raw_days": RETENTION.raw_days, "summary_days": RETENTION.summary_days,
-                "deletion_mode": RETENTION.deletion_mode,
-                "preserve_active_strategy_evidence": RETENTION.preserve_active_strategy_evidence,
-                "deletion_enabled": RETENTION.deletion_enabled,
-                "notice": "Retention is configured; no data will be deleted until verified archival and approval are implemented."}
-
-    @app.get("/api/account/retention/preview")
-    def retention_candidates(uid=Depends(user)):
-        with db() as con:
-            return retention_preview(con, uid, RETENTION.raw_days)
+    app.include_router(make_intelligence_router(user, db, now))
 
     @app.get("/health/ready")
     def ready():
