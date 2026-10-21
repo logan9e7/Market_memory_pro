@@ -15,16 +15,16 @@ class AuthenticationTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_password_rotation_revokes_sessions(self):
-        a = self.client.post("/api/register", json={"username":"quantuser","password":"initial-password-123"})
+        a = self.client.post("/api/register", json={"username":"quantuser","password":"Initial-password-123!"})
         self.assertEqual(a.status_code, 201)
         self.assertEqual(self.client.get("/api/auth/session").status_code, 200)
-        bad = self.client.post("/api/auth/change-password",json={"current_password":"wrong-password-123","new_password":"new-password-123"})
+        bad = self.client.post("/api/auth/change-password",json={"current_password":"wrong-password-123","new_password":"New-password-123!"})
         self.assertEqual(bad.status_code, 401)
-        good = self.client.post("/api/auth/change-password",json={"current_password":"initial-password-123","new_password":"new-password-123"})
+        good = self.client.post("/api/auth/change-password",json={"current_password":"Initial-password-123!","new_password":"New-password-123!"})
         self.assertEqual(good.status_code, 200)
         self.assertEqual(self.client.get("/api/auth/session").status_code,401)
-        self.assertEqual(self.client.post("/api/login",json={"username":"quantuser","password":"initial-password-123"}).status_code,401)
-        self.assertEqual(self.client.post("/api/login",json={"username":"quantuser","password":"new-password-123"}).status_code,200)
+        self.assertEqual(self.client.post("/api/login",json={"username":"quantuser","password":"Initial-password-123!"}).status_code,401)
+        self.assertEqual(self.client.post("/api/login",json={"username":"quantuser","password":"New-password-123!"}).status_code,200)
         self.assertEqual(self.client.post("/api/auth/logout-all",json={}).status_code,200)
         self.assertEqual(self.client.get("/api/auth/session").status_code,401)
 

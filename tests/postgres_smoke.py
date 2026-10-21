@@ -36,7 +36,7 @@ class PostgresWorkflowTests(WorkflowTests):
         finally:
             con.close()
         self.client = TestClient(self.app)
-        response=self.client.post("/api/register",json={"username":"researcher","password":"correct-long-password"})
+        response=self.client.post("/api/register",json={"username":"researcher","password":"Correct-long-password1!"})
         self.assertEqual(response.status_code,201,response.text)
 
     @contextmanager

@@ -1,27 +1,18 @@
-# Optional C++ numerical module
+# C++17/pybind11 numerical engine
 
-This is the first experimental Python/C++ hybrid slice. It is **not wired into
-production API endpoints** and does not modify data or place trades.
+The C++ module is optional and performs **only deterministic financial mathematics**.
+FastAPI, database ownership, authorization and AI stay in Python. No live order execution.
 
-Install a C++17 compiler, CMake and pybind11 in a development environment:
+## Build
 
-```sh
-python -m pip install pybind11
+```bash
+python -m pip install -r requirements.lock pybind11
 cmake -S native -B native/build -Dpybind11_DIR="$(python -m pybind11 --cmakedir)"
 cmake --build native/build --config Release
+cp native/build/_quant_core*.so app/
+python -m unittest discover -s tests -p 'test_quant_hybrid.py' -v
 ```
 
-Copy the built `_quant_core` extension to `app/` for optional import, or
-configure the build output there. Without it, `app.quant_hybrid` falls back
-to the existing Python pricing formula.
-
-Run parity tests:
-
-```sh
-python -m unittest tests.test_quant_hybrid
-```
-
-Before any production integration, benchmark native versus Python/NumPy on
-representative batch workloads, test extreme parameters, and confirm numerical
-agreement. Calling C++ once per option from Python may be slower than vectorized
-NumPy for large batches due to boundary overhead.
+Without a compiled extension the same API uses the existing Python formulas.
+CI compiles the native module, runs standalone C++ checks and validates Python parity.
+Native compilation is not currently part of the Render production build process.
