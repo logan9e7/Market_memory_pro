@@ -8,7 +8,7 @@ from app.schema import SCHEMA
 
 def create_database(root, db_path=None):
     postgres_url = os.getenv("DATABASE_URL") if db_path is None else None
-    database = Path(db_path or os.getenv("MARKET_MEMORY_DB", str(ROOT / ".data" / "memory.sqlite3")))
+    database = Path(db_path or os.getenv("MARKET_MEMORY_DB", str(root / ".data" / "memory.sqlite3")))
     if not postgres_url:
         database.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
 
@@ -32,7 +32,7 @@ def create_database(root, db_path=None):
 
     with db() as con:
         if postgres_url:
-            con.initialize((ROOT / "migrations" / "001_postgres.sql").read_text())
+            con.initialize((root / "migrations" / "001_postgres.sql").read_text())
         else:
             con.execute("PRAGMA journal_mode=WAL")
             con.executescript(SCHEMA)
