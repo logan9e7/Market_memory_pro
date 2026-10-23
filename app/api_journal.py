@@ -1,13 +1,14 @@
 """User-owned, transactional journal and review endpoints."""
 from fastapi import APIRouter, Depends, HTTPException
 from app.models import Quote, Snapshot, Visit, Decision, Review
+from app.locking import lock_scopes
 
 def make_journal_router(db, user, now, audit, evaluate, latest):
     router = APIRouter(tags=["journal"])
     @router.post("/api/quotes", status_code=201)
     def record_quote(payload: Quote, uid=Depends(user)):
         with db() as con:
-            con.execute("BEGIN IMMEDIATE")
+            lock_scopes(con, f"user:{uid}")
             qid = con.execute("INSERT INTO quotes(user_id,symbol,price,currency,recorded_at) VALUES(?,?,?,?,?)", (uid, payload.symbol, payload.price, payload.currency, now())).lastrowid
             quote = con.execute("SELECT * FROM quotes WHERE id=?", (qid,)).fetchone()
             evaluate(con, uid, quote)
@@ -28,7 +29,7 @@ def make_journal_router(db, user, now, audit, evaluate, latest):
     @router.post("/api/visits")
     def record_visit(payload: Visit, uid=Depends(user)):
         with db() as con:
-            con.execute("BEGIN IMMEDIATE")
+            lock_scopes(con, f"user:{uid}")
             existing = con.execute("SELECT id FROM visits WHERE user_id=? AND event_id=?", (uid, payload.event_id)).fetchone()
             if existing:
                 return {"id": existing["id"], "duplicate": True}
@@ -41,7 +42,7 @@ def make_journal_router(db, user, now, audit, evaluate, latest):
     @router.post("/api/decisions", status_code=201)
     def record_decision(payload: Decision, uid=Depends(user)):
         with db() as con:
-            con.execute("BEGIN IMMEDIATE")
+            lock_scopes(con, f"user:{uid}")
             existing = con.execute("SELECT d.*,s.symbol,s.currency,s.setup,s.side,s.condition,s.trigger_price FROM decisions d JOIN strategies s ON d.strategy_id=s.id WHERE d.user_id=? AND d.request_id=?", (uid, payload.request_id)).fetchone()
             if existing:
                 expected = (payload.symbol, payload.currency, payload.setup.casefold(), payload.side, payload.condition, payload.trigger_price, payload.price, payload.note)
@@ -59,7 +60,7 @@ def make_journal_router(db, user, now, audit, evaluate, latest):
     @router.post("/api/decisions/{decision_id}/review")
     def review_decision(decision_id: int, payload: Review, uid=Depends(user)):
         with db() as con:
-            con.execute("BEGIN IMMEDIATE")
+            lock_scopes(con, f"user:{uid}")
             decision = con.execute("SELECT * FROM decisions WHERE id=? AND user_id=?", (decision_id, uid)).fetchone()
             if not decision:
                 raise HTTPException(404, "Decision not found")

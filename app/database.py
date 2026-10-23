@@ -66,10 +66,7 @@ class PostgresConnection:
 
     def execute(self, sql, parameters=()):
         if sql == "BEGIN IMMEDIATE":
-            # Serialize brief evidence/approval writes across all API instances.
-            # This replaces SQLite's single-writer transaction semantics.
-            cursor = self.connection.execute("SELECT pg_advisory_xact_lock(74001991)")
-            return Cursor(cursor)
+            raise RuntimeError("Use app.locking.lock_scopes for transaction-scoped writes")
         ignored = sql.startswith("INSERT OR IGNORE")
         if ignored:
             sql = sql.replace("INSERT OR IGNORE", "INSERT", 1) + " ON CONFLICT DO NOTHING"

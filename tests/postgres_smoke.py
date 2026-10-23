@@ -86,6 +86,23 @@ class PostgresWorkflowTests(WorkflowTests):
         finally:
             con.close()
 
+    def test_user_scoped_advisory_locks_allow_independent_writes(self):
+        import psycopg
+        from app.locking import lock_scopes
+        first=PostgresConnection(url)
+        second=PostgresConnection(url)
+        try:
+            lock_scopes(first,"user:60001")
+            second.connection.execute("SET LOCAL lock_timeout = '250ms'")
+            lock_scopes(second,"user:60002")  # Independent user must not block.
+            with self.assertRaises(psycopg.errors.LockNotAvailable):
+                lock_scopes(second,"user:60001")  # Same user must serialize.
+            second.rollback()
+        finally:
+            first.rollback()
+            first.close()
+            second.close()
+
 
 if __name__ == "__main__":
     suite=unittest.defaultTestLoader.loadTestsFromTestCase(PostgresWorkflowTests)
