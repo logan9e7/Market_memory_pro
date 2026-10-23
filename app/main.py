@@ -19,6 +19,7 @@ from app.api_markets import make_markets_router
 from app.api_intelligence import make_intelligence_router
 from app.db_runtime import create_database
 from app.strategy_engine import make_strategy_engine
+from app.observability import install_observability
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -59,6 +60,8 @@ def create_app(db_path=None):
             response.headers["Cache-Control"] = "no-store"
         return response
 
+    install_observability(app)
+
     def user(request: Request):
         token = request.cookies.get("mm_session", "")
         token_hash = hashlib.sha256(token.encode()).hexdigest()
@@ -89,7 +92,7 @@ def create_app(db_path=None):
 
     @app.get("/health/live", include_in_schema=False)
     def live():
-        return {"status": "alive"}
+        return {"status": "alive", "revision": os.getenv("RENDER_GIT_COMMIT", "unknown")[:12]}
 
     @app.get("/health/ready")
     def ready():
@@ -98,7 +101,8 @@ def create_app(db_path=None):
                 con.execute("SELECT 1 FROM users LIMIT 1").fetchall()
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Database unavailable") from exc
-        return {"status": "ready", "database": "reachable", "execution_mode": "paper"}
+        return {"status": "ready", "database": "reachable", "execution_mode": "paper",
+                "revision": os.getenv("RENDER_GIT_COMMIT", "unknown")[:12]}
 
     @app.get("/")
     def index():

@@ -59,9 +59,18 @@ class PostgresConnection:
                     sslmode="verify-full", sslrootcert=str(ca_file)
                 )
         else:
+            # Respect Render/Supabase CA secret-file configuration when present.
+            # Never relax hostname or certificate verification.
+            ca_path = os.getenv("PGSSLROOTCERT", "").strip()
+            if ca_path:
+                if not Path(ca_path).is_file():
+                    raise ValueError("PGSSLROOTCERT does not point to an accessible CA file")
+                trust = ca_path
+            else:
+                trust = "system"
             self.connection = psycopg.connect(
                 url, row_factory=dict_row, connect_timeout=10,
-                sslmode="verify-full", sslrootcert="system"
+                sslmode="verify-full", sslrootcert=trust
             )
 
     def execute(self, sql, parameters=()):
