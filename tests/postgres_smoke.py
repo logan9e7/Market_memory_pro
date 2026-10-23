@@ -55,12 +55,16 @@ class PostgresWorkflowTests(WorkflowTests):
             root=Path(__file__).resolve().parent.parent / "migrations"
             versions=con.connection.execute(
                 "SELECT version FROM mm_schema_migrations ORDER BY version").fetchall()
-            self.assertEqual([r["version"] for r in versions],[1,2])
+            self.assertEqual([r["version"] for r in versions],[1,2,3])
             ledger=con.connection.execute(
                 "SELECT relrowsecurity FROM pg_class WHERE relname='mm_schema_migrations'"
             ).fetchone()
             self.assertTrue(ledger["relrowsecurity"])
             self.assertEqual(apply_migrations(con,root,check_only=True),[])
+            index_exists=con.connection.execute(
+                "SELECT to_regclass('mm_lab_notes_idea_fk') AS name"
+            ).fetchone()
+            self.assertIsNotNone(index_exists["name"])
             con.commit()
             with tempfile.TemporaryDirectory() as folder:
                 for path in root.glob("*.sql"):
@@ -110,7 +114,7 @@ class PostgresWorkflowTests(WorkflowTests):
                 "INSERT INTO users(username,password_hash) VALUES(%s,%s)",
                 ("existing-user", "preexisting-hash")
             )
-            self.assertEqual(apply_migrations(con,root),[1,2])
+            self.assertEqual(apply_migrations(con,root),[1,2,3])
             saved=con.connection.execute(
                 "SELECT username,password_hash FROM users WHERE username=%s",
                 ("existing-user",)
