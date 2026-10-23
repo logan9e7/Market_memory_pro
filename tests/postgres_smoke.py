@@ -90,6 +90,38 @@ class PostgresWorkflowTests(WorkflowTests):
         finally:
             con.close()
 
+
+    def test_legacy_partial_schema_migration_preserves_existing_user(self):
+        from app.migrations import apply_migrations
+        root=Path(__file__).resolve().parent.parent / "migrations"
+        con=PostgresConnection(url)
+        try:
+            # Only the disposable mm_test database; never touch production schemas.
+            con.connection.execute("CREATE SCHEMA mm_legacy_upgrade_test")
+            con.connection.execute("SET LOCAL search_path TO mm_legacy_upgrade_test")
+            con.connection.execute("""
+                CREATE TABLE users(
+                    id BIGSERIAL PRIMARY KEY,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL
+                )
+            """)
+            con.connection.execute(
+                "INSERT INTO users(username,password_hash) VALUES(%s,%s)",
+                ("existing-user", "preexisting-hash")
+            )
+            self.assertEqual(apply_migrations(con,root),[1,2])
+            saved=con.connection.execute(
+                "SELECT username,password_hash FROM users WHERE username=%s",
+                ("existing-user",)
+            ).fetchone()
+            self.assertEqual(saved["password_hash"],"preexisting-hash")
+            self.assertEqual(apply_migrations(con,root,check_only=True),[])
+            # Roll back the isolated schema and test user atomically.
+            con.rollback()
+        finally:
+            con.close()
+
     def test_user_scoped_advisory_locks_allow_independent_writes(self):
         import psycopg
         from app.locking import lock_scopes
