@@ -45,3 +45,22 @@ extension is explicitly built and installed on its runtime.
   safe archival, dependency checks and explicit approvals are implemented.
 - No live order execution should be enabled without dedicated risk, audit,
   authorization, and regulatory reviews.
+
+## Operations hardening (October 2026)
+- `app.migrations` records SHA-256 migration checksums and applies only pending
+  migrations inside one advisory-locked PostgreSQL transaction. The ledger is
+  RLS-protected; public Supabase roles receive no access.
+- `app.locking` isolates writer locks by user; shared authentication throttles
+  use their own deterministic scopes. SQLite still uses `BEGIN IMMEDIATE`.
+- `app.observability` logs structured, privacy-conscious request events with
+  correlation IDs and duration; status endpoints expose a short deploy revision.
+- `scripts/start-production.sh` runs the versioned migrator before the API.
+  Legacy Render services with unchanged dashboard commands use compatible
+  startup migration checks until their start command is updated.
+- `PGSSLROOTCERT` secret-file paths are honored, with TLS `verify-full`
+  always enforced. The existing PEM secret environment variable also works.
+- Automatic deletion and live brokerage execution remain disabled.
+
+**Verification boundary:** GitHub integration tests use disposable TLS PostgreSQL.
+Render/Supabase production startup, role permissions, backups, and recovery must be
+separately verified; passing CI does not prove production readiness.

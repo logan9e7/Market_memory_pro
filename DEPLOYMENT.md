@@ -18,9 +18,15 @@ version. Existing application accounts remain in the application's users table.
    or chat. The driver enforces `sslmode=verify-full`; certificate and hostname
    verification are retained. Neon can also be used with its official verified
    PostgreSQL connection string and appropriate CA trust configuration.
-5. The initial migration, `migrations/001_postgres.sql`, is applied at startup
-   inside a transaction with a migration advisory lock. Subsequent schema
-   changes require new migration files and a deliberate migration runner.
+5. Migrations are numbered in `migrations/` and protected by checksums,
+   a ledger table, and a transaction-scoped PostgreSQL advisory lock. Run
+   `python -m app.migrations check` to verify and
+   `python -m app.migrations apply` to apply pending additions.
+   The current free-tier Render service still runs the versioned migration
+   checker/runner during startup (default compatibility setting), but only
+   pending migrations execute; previously applied SQL is never replayed.
+   When a separate migration deploy step becomes available, set
+   `MARKET_MEMORY_MIGRATIONS_AT_STARTUP=0` and migrate before deploying.
 
 This application requires an application-private database/schema access model.
 The migration revokes access by Supabase's anon/authenticated roles and disables
@@ -32,9 +38,10 @@ database credentials to the browser. Supabase public JS keys are unnecessary.
 ## Render
 
 Create a Blueprint from `logan9e7/Market_memory_pro` on branch `main` using
-`render.yaml`. It defines a paid Starter web service to avoid free-service
-sleep affecting app visits. Review the service's price in Render before creating
-it. No paid resource is created by adding this file to Git.
+`render.yaml`. It specifies a free-tier web service. An existing service's
+dashboard settings may override the Blueprint; inspect the actual Render
+start command and branch before relying on these settings.
+Free instances can sleep after inactivity.
 
 Set the secrets above plus `MARKET_MEMORY_ORIGIN` to the exact HTTPS service
 origin, without a trailing slash. `MARKET_MEMORY_SECURE_COOKIE=1` is supplied by
@@ -63,3 +70,26 @@ For an automatic local PostgreSQL/TLS test, use `bash scripts/test-postgres.sh`
 with Docker available. It creates and removes its own container and temporary
 test certificate, runs the suite, and keeps verification enabled. CI runs this
 alongside the SQLite suite. Set `MM_TEST_PORT` if 55432 is already occupied.
+
+## Operational readiness and logging
+
+Each request receives an `X-Request-ID` response header and a JSON-line
+access log including its method, templated route, status, and latency.
+Headers, cookies, queries, bodies and journal text are **not logged**.
+`GET /health/live` confirms the process is responsive, while
+`GET /health/ready` confirms database access. Both include a short
+`RENDER_GIT_COMMIT` revision when Render supplies it.
+
+The Blueprint's start script applies **only pending versioned migrations**
+in a separate process and then runs Uvicorn with a read-only startup migration
+check. Older dashboard-configured services can still use the compatibility
+startup migrator. Do not disable both migration paths unless a separate
+migration process has run successfully.
+
+If Render's autodeploy is not delivering GitHub main commits, investigate the
+GitHub-Render installation and actual branch settings. An old successful
+compile is not proof that the current commit is deployed.
+
+Before production release, test a backup restoration in an isolated database.
+Avoid any destructive schema change or retention deletion until backups,
+preflight verification, approval, and rollback procedures are established.

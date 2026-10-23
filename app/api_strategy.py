@@ -4,13 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from app.models import Alert
 from app.config import MIN_REVIEWS
+from app.locking import lock_scopes
 
 def make_strategy_router(db, user, now, audit, latest, fresh, matches, stats, evaluate):
     router=APIRouter(tags=["strategies"])
     @router.post("/api/alerts", status_code=201)
     def create_alert(payload: Alert, uid=Depends(user)):
         with db() as con:
-            con.execute("BEGIN IMMEDIATE")
+            lock_scopes(con, f"user:{uid}")
             aid = con.execute("INSERT INTO alerts(user_id,symbol,currency,condition,target) VALUES(?,?,?,?,?)", (uid, payload.symbol.upper(), payload.currency, payload.condition, payload.target)).lastrowid
             quote = latest(con, uid, payload.symbol.upper(), payload.currency)
             if fresh(quote):
@@ -25,7 +26,7 @@ def make_strategy_router(db, user, now, audit, latest, fresh, matches, stats, ev
     @router.post("/api/opportunities/{opportunity_id}/approval")
     def approval(opportunity_id: int, payload: Approval, uid=Depends(user)):
         with db() as con:
-            con.execute("BEGIN IMMEDIATE")
+            lock_scopes(con, f"user:{uid}")
             opportunity = con.execute("SELECT * FROM opportunities WHERE id=? AND user_id=?", (opportunity_id, uid)).fetchone()
             if not opportunity:
                 raise HTTPException(404, "Opportunity not found")

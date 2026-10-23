@@ -4,6 +4,7 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from app.database import PostgresConnection
+from app.migrations import apply_migrations
 from app.schema import SCHEMA
 
 def create_database(root, db_path=None):
@@ -32,7 +33,10 @@ def create_database(root, db_path=None):
 
     with db() as con:
         if postgres_url:
-            con.initialize((root / "migrations" / "001_postgres.sql").read_text())
+            # Backwards-compatible for Render services that still use the old start command.
+            # Only pending, checksum-verified migrations execute; no repeated schema DDL.
+            check_only = os.getenv("MARKET_MEMORY_MIGRATIONS_AT_STARTUP", "1") != "1"
+            apply_migrations(con, root / "migrations", check_only=check_only)
         else:
             con.execute("PRAGMA journal_mode=WAL")
             con.executescript(SCHEMA)

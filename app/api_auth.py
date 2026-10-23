@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from app.database import IntegrityErrors
+from app.locking import lock_scopes
 from app.models import Credentials, RegistrationCredentials, PasswordChange
 from app.config import (
     SESSION_DAYS, SESSION_MAX_AGE_SECONDS, PASSWORD_HASH_ITERATIONS,
@@ -31,7 +32,7 @@ def make_auth_router(db, user, audit, now):
         keys = [hashlib.sha256(("ip:" + ip).encode()).hexdigest(), hashlib.sha256(("user:" + username.lower()).encode()).hexdigest()]
         cutoff = (datetime.now(timezone.utc) - timedelta(minutes=AUTH_WINDOW_MINUTES)).isoformat()
         with db() as con:
-            con.execute("BEGIN IMMEDIATE")
+            lock_scopes(con, *(f"auth:{key}" for key in keys))
             con.execute("DELETE FROM auth_attempts WHERE recorded_at<?", (cutoff,))
             blocked = any(con.execute("SELECT COUNT(*) FROM auth_attempts WHERE key=?", (key,)).fetchone()[0] >= limit for key, limit in zip(keys, (AUTH_IP_ATTEMPTS, AUTH_USER_ATTEMPTS)))
             if not blocked:
@@ -82,6 +83,7 @@ def make_auth_router(db, user, audit, now):
     @router.post("/api/auth/logout-all")
     def logout_all(response: Response, uid=Depends(user)):
         with db() as con:
+            lock_scopes(con, f"user:{uid}")
             con.execute("DELETE FROM sessions WHERE user_id=?", (uid,))
             audit(con, uid, "logout_all", None, {})
         response.delete_cookie("mm_session")
@@ -92,6 +94,7 @@ def make_auth_router(db, user, audit, now):
         if payload.current_password == payload.new_password:
             raise HTTPException(422, "New password must be different")
         with db() as con:
+            lock_scopes(con, f"user:{uid}")
             row = con.execute("SELECT password_hash FROM users WHERE id=?", (uid,)).fetchone()
             stored = row["password_hash"]
             if not hmac.compare_digest(password_hash(payload.current_password, stored.split(":")[0]), stored):

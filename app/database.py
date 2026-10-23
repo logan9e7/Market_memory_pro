@@ -59,17 +59,23 @@ class PostgresConnection:
                     sslmode="verify-full", sslrootcert=str(ca_file)
                 )
         else:
+            # Respect Render/Supabase CA secret-file configuration when present.
+            # Never relax hostname or certificate verification.
+            ca_path = os.getenv("PGSSLROOTCERT", "").strip()
+            if ca_path:
+                if not Path(ca_path).is_file():
+                    raise ValueError("PGSSLROOTCERT does not point to an accessible CA file")
+                trust = ca_path
+            else:
+                trust = "system"
             self.connection = psycopg.connect(
                 url, row_factory=dict_row, connect_timeout=10,
-                sslmode="verify-full", sslrootcert="system"
+                sslmode="verify-full", sslrootcert=trust
             )
 
     def execute(self, sql, parameters=()):
         if sql == "BEGIN IMMEDIATE":
-            # Serialize brief evidence/approval writes across all API instances.
-            # This replaces SQLite's single-writer transaction semantics.
-            cursor = self.connection.execute("SELECT pg_advisory_xact_lock(74001991)")
-            return Cursor(cursor)
+            raise RuntimeError("Use app.locking.lock_scopes for transaction-scoped writes")
         ignored = sql.startswith("INSERT OR IGNORE")
         if ignored:
             sql = sql.replace("INSERT OR IGNORE", "INSERT", 1) + " ON CONFLICT DO NOTHING"
