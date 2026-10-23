@@ -18,9 +18,15 @@ version. Existing application accounts remain in the application's users table.
    or chat. The driver enforces `sslmode=verify-full`; certificate and hostname
    verification are retained. Neon can also be used with its official verified
    PostgreSQL connection string and appropriate CA trust configuration.
-5. The initial migration, `migrations/001_postgres.sql`, is applied at startup
-   inside a transaction with a migration advisory lock. Subsequent schema
-   changes require new migration files and a deliberate migration runner.
+5. Migrations are numbered in `migrations/` and protected by checksums,
+   a ledger table, and a transaction-scoped PostgreSQL advisory lock. Run
+   `python -m app.migrations check` to verify and
+   `python -m app.migrations apply` to apply pending additions.
+   The current free-tier Render service still runs the versioned migration
+   checker/runner during startup (default compatibility setting), but only
+   pending migrations execute; previously applied SQL is never replayed.
+   When a separate migration deploy step becomes available, set
+   `MARKET_MEMORY_MIGRATIONS_AT_STARTUP=0` and migrate before deploying.
 
 This application requires an application-private database/schema access model.
 The migration revokes access by Supabase's anon/authenticated roles and disables
