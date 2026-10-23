@@ -54,6 +54,21 @@ def apply_migrations(con, directory, check_only=False):
               applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # Supabase default privileges can expose newly created public tables.
+        # The migration ledger is application-private, with no public RLS policies.
+        con.connection.execute("ALTER TABLE mm_schema_migrations ENABLE ROW LEVEL SECURITY")
+        con.connection.execute("REVOKE ALL ON mm_schema_migrations FROM PUBLIC")
+        con.connection.execute("""
+            DO $mm_revoke$
+            DECLARE role_name text;
+            BEGIN
+              FOREACH role_name IN ARRAY ARRAY['anon','authenticated'] LOOP
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role_name) THEN
+                  EXECUTE format('REVOKE ALL ON mm_schema_migrations FROM %I', role_name);
+                END IF;
+              END LOOP;
+            END $mm_revoke$;
+        """)
     installed = {
         row["version"]: row
         for row in con.connection.execute(

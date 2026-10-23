@@ -56,6 +56,10 @@ class PostgresWorkflowTests(WorkflowTests):
             versions=con.connection.execute(
                 "SELECT version FROM mm_schema_migrations ORDER BY version").fetchall()
             self.assertEqual([r["version"] for r in versions],[1,2])
+            ledger=con.connection.execute(
+                "SELECT relrowsecurity FROM pg_class WHERE relname='mm_schema_migrations'"
+            ).fetchone()
+            self.assertTrue(ledger["relrowsecurity"])
             self.assertEqual(apply_migrations(con,root,check_only=True),[])
             con.commit()
             with tempfile.TemporaryDirectory() as folder:
