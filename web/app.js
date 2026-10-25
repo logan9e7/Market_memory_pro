@@ -6,10 +6,10 @@ const date = value => value ? new Date(value).toLocaleString() : '—';
 const money = (value, currency) => `${currency || ''} ${Number(value).toLocaleString(undefined, {maximumFractionDigits:8})}`;
 let signedIn = false;
 let visitOpen = false;
-let activeTab = 'capture';
+let activeTab = 'overview';
 let state = {};
 
-function notice(message, error = false) { $('#notice').textContent = message; $('#notice').className = error ? 'error' : ''; }
+function notice(message, error = false) { $('#notice').textContent = message; $('#notice').className = error ? 'error' : ''; const feedback = $('#auth-feedback'); if (feedback) feedback.textContent = $('#auth-dialog').open && error ? message : ''; }
 async function api(path, body, options = {}) {
   const response = await fetch(`/api/${path}`, {method:body ? 'POST':'GET', headers:{'Content-Type':'application/json'}, credentials:'same-origin', ...(body ? {body:JSON.stringify(body)} : {}), ...options});
   const result = await response.json();
@@ -19,7 +19,7 @@ async function api(path, body, options = {}) {
   }
   return result;
 }
-function showAuth() { signedIn = false; visitOpen = false; $('#auth').hidden = false; $('#workspace').hidden = true; $('#identity').replaceChildren(); }
+function showAuth() { signedIn = false; visitOpen = false; document.body.classList.remove('is-signed-in'); $('#auth').hidden = false; $('#workspace').hidden = true; $('#identity').replaceChildren(); if ($('#auth-dialog').open) $('#auth-dialog').close(); }
 function fields(form) { return Object.fromEntries(new FormData(form)); }
 function numeric(data, keys) { keys.forEach(k => data[k] = Number(data[k])); return data; }
 async function submit(form, work) {
@@ -28,16 +28,17 @@ async function submit(form, work) {
   finally { buttons.forEach(b => b.disabled = false); }
 }
 function list(selector, rows, render, empty) { $(selector).innerHTML = rows.length ? rows.map(render).join('') : `<div class="empty">${e(empty)}</div>`; }
-function setTab(tab) { activeTab = tab; document.querySelectorAll('[data-view]').forEach(v => v.hidden = v.dataset.view !== tab); document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('selected', b.dataset.tab === tab)); }
+function setTab(tab) { activeTab = tab; document.querySelectorAll('[data-view]').forEach(v => v.hidden = v.dataset.view !== tab); document.querySelectorAll('[data-tab]').forEach(b => { const active = b.dataset.tab === tab; b.classList.toggle('selected', active); b.setAttribute('aria-current', active ? 'page' : 'false'); }); }
 document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => setTab(button.dataset.tab)));
 
 async function refresh() {
-  state = await api('state'); signedIn = true; $('#auth').hidden = true; $('#workspace').hidden = false;
+  state = await api('state'); signedIn = true; $('#auth').hidden = true; $('#workspace').hidden = false; document.body.classList.add('is-signed-in'); if ($('#auth-dialog').open) $('#auth-dialog').close();
   $('#identity').innerHTML = `<span>${e(state.username)}</span><button class="secondary" id="signout">Sign out</button>`;
   $('#signout').addEventListener('click', async () => { try { await captureVisit('close'); await api('logout', {}); showAuth(); notice('Signed out.'); } catch (err) { notice(err.message, true); } });
   const pending = state.opportunities.filter(o => o.status === 'pending');
   $('#pending-count').textContent = pending.length ? `(${pending.length})` : '';
-  $('#metrics').innerHTML = [[state.decisions.length,'Recent decisions'],[state.strategies.filter(s=>s.eligible).length,'Strategies above 70%'],[pending.length,'Awaiting your approval'],[state.snapshots.length,'Recent captured moments']].map(([value,label]) => `<div class="metric"><strong>${value}</strong><small>${label}</small></div>`).join('');
+  $('#metrics').innerHTML = [[state.decisions.length,'Decisions logged'],[state.snapshots.length,'Snapshots kept'],[state.strategies.length,'Strategies tracked'],[pending.length,'Approvals waiting']].map(([value,label]) => `<div class="metric"><strong>${value}</strong><small>${label}</small></div>`).join('');
+  renderRecentActivity();
   list('#quotes', state.quotes, q => `<div class="item"><strong>${e(q.symbol)}</strong> · ${e(money(q.price,q.currency))}<div class="meta">User-recorded · ${e(date(q.recorded_at))}</div></div>`, 'Your first recorded price starts the memory.');
   list('#alerts', state.alerts, a => `<div class="item"><strong>${e(a.symbol)}</strong> ${e(a.condition)} ${e(money(a.target,a.currency))} <span class="badge ${a.active?'pending':''}">${a.active?'Watching recorded prices':'Triggered'}</span>${a.triggered_at?`<div class="meta">${e(date(a.triggered_at))}</div>`:''}</div>`, 'No levels saved yet.');
   $('#visits').textContent = state.visits[0] ? `Last visit event: ${state.visits[0].kind} · ${date(state.visits[0].recorded_at)}` : 'Visits capture automatically after sign-in.';
@@ -140,3 +141,25 @@ $('#analyze-memory').addEventListener('click', async event => {
     notice(err.message, true);
   } finally { button.disabled = false; }
 });
+
+
+/* Research Desk: intentional navigation and evidence-only overview. */
+function renderRecentActivity() {
+  const records = [
+    ...(state.decisions || []).map(d => ({kind:'DECISION',title:d.symbol + ' · ' + d.setup,detail:d.outcome ? 'Reviewed: ' + d.outcome : 'Awaiting outcome review',at:d.recorded_at})),
+    ...(state.snapshots || []).map(s => ({kind:'SNAPSHOT',title:s.symbol + ' · ' + s.kind,detail:s.note || 'Recorded market observation',at:s.recorded_at}))
+  ].sort((a,b) => (Date.parse(b.at || '') || 0) - (Date.parse(a.at || '') || 0)).slice(0,4);
+  $('#recent-activity').innerHTML = records.length
+    ? records.map(r => '<div class="activity-row"><div><div class="eyebrow">' + e(r.kind) + '</div><strong>' + e(r.title) + '</strong><br><span>' + e(r.detail) + '</span></div><time>' + e(date(r.at)) + '</time></div>').join('')
+    : '<div class="recent-empty"><h3>Your first entry starts the story.</h3><p>No market records yet. Capture an observation to build your timeline.</p></div>';
+}
+function openAuthDialog() {
+  const dialog = $('#auth-dialog');
+  if (!dialog.open) dialog.showModal();
+  const username = dialog.querySelector('input[name="username"]');
+  if (username) username.focus();
+}
+$('#open-auth').addEventListener('click', openAuthDialog);
+$('#open-auth-top').addEventListener('click', openAuthDialog);
+$('#close-auth').addEventListener('click', () => $('#auth-dialog').close());
+document.querySelectorAll('[data-goto]').forEach(button => button.addEventListener('click', () => { setTab(button.dataset.goto); window.scrollTo({top:0,behavior:'smooth'}); }));

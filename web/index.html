@@ -1,9 +1,92 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Market Memory Pro</title><link rel="stylesheet" href="/static/style.css?v=auth-20261018-3"><script defer src="/static/app.js?v=auth-20261018-3"></script></head>
-<body><header><a class="brand" href="/">M<span>↗</span> <strong>Market Memory</strong><small>PRO</small></a><div id="identity"></div></header>
-<main><div id="notice" role="status" aria-live="polite"></div><section id="auth" class="auth panel"><div class="eyebrow">YOUR MARKET. YOUR MEMORY.</div><h1>Keep the reasoning.<br>Learn from the result.</h1><p>A private notebook for the decisions you make, the opportunities you notice, and the patterns worth returning to.</p><form id="auth-form"><label>Username<input name="username" autocomplete="username" required minlength="3" maxlength="80"></label><label>Password<input name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="256"></label><label class="check"><input type="checkbox" name="shared_device"> Shared or public device (2-hour session; closes on browser exit)</label><div class="actions"><button name="intent" value="login">Sign in</button><button name="intent" value="register" class="secondary">Create account</button></div></form><p class="muted">New accounts require 12+ characters with uppercase, lowercase, number and symbol.</p></section>
-<div id="workspace" hidden><section class="hero"><div><div class="eyebrow">OBSERVE · RECORD · REVIEW</div><h1>Your edge has a history.</h1><p>Build a memory from your own prices and decisions.</p></div><div class="mode">◉ PAPER EXECUTION</div></section><div id="metrics" class="metrics"></div>
-<nav aria-label="Notebook views"><button data-tab="capture" class="selected">Capture</button><button data-tab="memory">Memory</button><button data-tab="strategies">Strategies</button><button data-tab="lab">Strategy Lab</button><button data-tab="quant">Quant Lab</button><button data-tab="intelligence">AI Insights</button><button data-tab="account">Account &amp; security</button><button data-tab="opportunities">Approval inbox <span id="pending-count"></span></button></nav>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1217">
+<meta name="description" content="A private research desk for market observations, decisions and evidence-backed learning.">
+<title>Market Memory Pro — Your Research Desk</title>
+<link rel="stylesheet" href="/static/style.css?v=desk-20261025-1">
+<script defer src="/static/app.js?v=desk-20261025-1"></script>
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="/" aria-label="Market Memory Pro home"><span class="brand-mark">M /</span><strong>MARKET MEMORY</strong></a>
+  <div class="site-actions"><span>PRO <span class="dot-separator">•</span> RESEARCH DESK</span><button type="button" id="open-auth-top" class="header-signin">Sign in <span aria-hidden="true">↗</span></button></div>
+</header>
+<main id="app-root">
+<div id="notice" role="status" aria-live="polite"></div>
+<section id="auth" class="landing" aria-labelledby="landing-title">
+  <div class="landing-copy">
+    <div class="eyebrow">THE QUIET SIDE OF THE MARKET <span class="slash">/</span> 01</div>
+    <h1 id="landing-title">Trade less on impulse.<br>Remember more of what matters.</h1>
+    <p class="landing-lead">A private research desk for your observations, decisions, and lessons. No noise. No invented signals. Just evidence you can return to.</p>
+    <div class="landing-actions"><button type="button" id="open-auth" class="primary-action">Open your desk <span aria-hidden="true">↗</span></button><a href="#method" class="text-link">HOW IT WORKS <span aria-hidden="true">↓</span></a></div>
+    <div class="method" id="method" aria-label="Research workflow">
+      <div class="method-step"><span>01</span><strong>Observe</strong><small>Save the context</small></div>
+      <div class="method-step"><span>02</span><strong>Decide</strong><small>Write your thesis</small></div>
+      <div class="method-step"><span>03</span><strong>Review</strong><small>Learn from outcomes</small></div>
+    </div>
+    <p class="landing-footnote">PRIVATE BY DESIGN <span>·</span> PAPER EXECUTION ONLY</p>
+  </div>
+  <aside class="field-note" aria-label="Illustrative research note">
+    <div class="eyebrow">FIELD NOTE <span class="slash">/</span> EXAMPLE</div>
+    <h2>A thought worth keeping.</h2>
+    <div class="field-note-divider"></div>
+    <div class="field-note-symbol">NIFTY 50 <span class="slash">/</span> WATCHLIST</div>
+    <h3>Breakout needs confirmation</h3>
+    <p>Observed price near resistance.<br>Wait for volume, then review the setup.<br>Not a signal. A recorded hypothesis.</p>
+    <div class="field-note-status"><span>STATUS</span><strong>Evidence building</strong></div>
+    <div class="field-note-divider"></div>
+    <small>A notebook, not a brokerage terminal.</small>
+  </aside>
+</section>
+<dialog id="auth-dialog" class="auth-dialog" aria-labelledby="auth-title">
+  <div class="auth-top"><div><div class="eyebrow">PRIVATE RESEARCH DESK</div><h2 id="auth-title">Welcome to your desk.</h2><p>Sign in or create a private account to start keeping evidence.</p></div><button type="button" id="close-auth" class="close-auth" aria-label="Close sign in">×</button></div>
+  <div id="auth-feedback" role="status" aria-live="polite"></div>
+  <form id="auth-form">
+    <label>Username<input name="username" autocomplete="username" required minlength="3" maxlength="80"></label>
+    <label>Password<input name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="256"></label>
+    <label class="check"><input type="checkbox" name="shared_device"> Shared or public device (2-hour session; closes on browser exit)</label>
+    <div class="actions"><button name="intent" value="login">Sign in</button><button name="intent" value="register" class="secondary">Create account</button></div>
+  </form>
+  <p class="muted auth-hint">New accounts need 12+ characters with uppercase, lowercase, number and symbol.</p>
+</dialog>
+<div id="workspace" class="app-shell" hidden>
+  <aside class="sidebar">
+    <div class="sidebar-head"><div class="sidebar-logo">M / MEMORY</div><small>YOUR RESEARCH DESK</small></div>
+    <div class="sidebar-nav-label">WORKSPACE</div>
+    <nav class="workspace-nav" aria-label="Notebook views">
+      <button type="button" data-tab="overview" class="selected">Overview</button>
+      <button type="button" data-tab="capture">Capture</button>
+      <button type="button" data-tab="memory">Memory</button>
+      <button type="button" data-tab="strategies">Strategies</button>
+      <button type="button" data-tab="lab">Strategy Lab</button>
+      <button type="button" data-tab="quant">Quant Lab</button>
+      <button type="button" data-tab="intelligence">AI Insights</button>
+      <button type="button" data-tab="opportunities">Approval inbox <span id="pending-count"></span></button>
+      <button type="button" data-tab="account">Account &amp; security</button>
+    </nav>
+    <div class="sidebar-bottom"><strong><span class="status-dot"></span> PAPER ONLY</strong><small>Your approval is always required.</small></div>
+  </aside>
+  <div class="workspace-main">
+    <div class="workspace-topline"><span>PRIVATE WORKSPACE <span class="slash">/</span> MARKET MEMORY PRO</span><div id="identity"></div></div>
+    <section data-view="overview" class="overview">
+      <div class="eyebrow">OVERVIEW <span class="slash">/</span> YOUR RESEARCH DESK</div>
+      <h1>Good to have you back.</h1>
+      <p class="overview-intro">Start with what you observed. The story comes from your own records.</p>
+      <div id="metrics" class="metrics" aria-label="Your recorded activity"></div>
+      <div class="overview-section-title"><h2>Where do you want to begin?</h2><p>Three actions, one research process.</p></div>
+      <div class="desk-actions">
+        <button type="button" class="desk-action" data-goto="capture"><span>01 <span class="slash">/</span> CAPTURE</span><strong>Record an observation</strong><small>A price, a moment, a reason.</small><i aria-hidden="true">↗</i></button>
+        <button type="button" class="desk-action" data-goto="memory"><span>02 <span class="slash">/</span> MEMORY</span><strong>Review your decisions</strong><small>Return to the thesis and outcome.</small><i aria-hidden="true">↗</i></button>
+        <button type="button" class="desk-action" data-goto="lab"><span>03 <span class="slash">/</span> RESEARCH</span><strong>Test a hypothesis</strong><small>Explore evidence before acting.</small><i aria-hidden="true">↗</i></button>
+      </div>
+      <div class="overview-lower">
+        <article class="recent-panel"><div class="eyebrow">RECENT ACTIVITY</div><div id="recent-activity" aria-live="polite"><div class="recent-empty"><h3>Your first entry starts the story.</h3><p>No market records yet. Capture an observation to build your timeline.</p></div></div></article>
+        <aside class="principle-panel"><div class="eyebrow">THE PRINCIPLE</div><h3>A pattern is earned.<br>Never assumed.</h3><p>Paper execution only. No live trades.</p></aside>
+      </div>
+    </section>
 <section data-view="capture"><div class="grid"><article class="panel"><div class="eyebrow">01 / MARKET CONTEXT</div><h2>Record a price</h2><p>Use a price you observed. These records drive your alerts and strategy checks.</p><form id="quote-form"><div class="row"><label>Symbol<input name="symbol" placeholder="RELIANCE.NS" required maxlength="32"></label><label>Currency<select name="currency"><option>INR</option><option>USD</option><option>EUR</option></select></label></div><label>Observed price<input name="price" type="number" min="0.00000001" step="any" required></label><button>Save price & check rules</button></form><div id="quotes" class="stack"></div></article>
 <article class="panel"><div class="eyebrow">02 / A MOMENT WORTH KEEPING</div><h2>Manual snapshot</h2><p>Freeze the last price you recorded alongside your market observation.</p><form id="snapshot-form"><label>Symbol<input name="symbol" required maxlength="32" placeholder="RELIANCE.NS"></label><label>What did you notice?<textarea name="note" maxlength="5000" placeholder="Volume expanded near the level I was watching…"></textarea></label><button>Keep this moment</button></form></article></div>
 <div class="grid"><article class="panel"><div class="eyebrow">03 / RECORD YOUR REASONING</div><h2>Decision journal</h2><p>Repeat the same setup and rule to build a comparable strategy history. Outcomes are reviewed afterward.</p><form id="decision-form"><div class="row"><label>Symbol<input name="symbol" required maxlength="32"></label><label>Currency<select name="currency"><option>INR</option><option>USD</option><option>EUR</option></select></label></div><label>Setup name<input name="setup" required minlength="2" maxlength="120" placeholder="Breakout above resistance"></label><div class="row"><label>Action<select name="side"><option value="buy">Buy</option><option value="sell">Sell</option></select></label><label>Observed entry price<input name="price" type="number" step="any" min="0.00000001" required></label></div><div class="row"><label>Opportunity rule<select name="condition"><option value="above">At or above</option><option value="below">At or below</option></select></label><label>Trigger price<input name="trigger_price" type="number" step="any" min="0.00000001" required></label></div><label>Reasoning<textarea name="note" required maxlength="5000" placeholder="Why this setup? What would invalidate it?"></textarea></label><button>Record decision</button></form></article>
@@ -27,4 +110,9 @@
 <article class="panel"><h2>Provider status</h2><p>Provider credentials are stored on the server, never in your browser. India and US data require configured credentials.</p><div id="provider-result" class="stack"></div></article></div></section>
 <section data-view="intelligence" hidden><article class="panel"><div class="eyebrow">FIVE-LEVEL INTELLIGENCE</div><h2>Learn from your trading memory</h2><p>Analyze your recent journals, snapshots and prices. The AI forms evidence-linked hypotheses, not trading signals. This sends selected journal data to the configured LLM provider.</p><button id="analyze-memory" type="button">Analyze my memory</button><p class="muted">Requires a server-side LLM API key. Analysis runs only when you request it.</p><div id="intelligence-result" class="stack" aria-live="polite"></div></article></section>
 <section data-view="account" hidden><div class="section-heading"><h2>Account security</h2><p>Change password and revoke all sessions.</p></div><div class="grid"><article class="panel"><h2>Change password</h2><form id="password-form"><label>Current password<input type="password" name="current_password" autocomplete="current-password" minlength="10" required></label><label>New password<input type="password" name="new_password" autocomplete="new-password" minlength="12" required></label><p class="muted">At least 12 characters, including a letter and a digit.</p><button>Update password and sign out</button></form></article><article class="panel"><h2>Sessions</h2><p>Revoke every active session, including this one.</p><button class="secondary" id="logout-all">Sign out all devices</button><p class="muted">Account persistence requires a durable database; Render's local SQLite storage is temporary.</p></article></div></section><section data-view="opportunities" hidden><div class="section-heading"><h2>You decide what happens next.</h2><p>When a qualifying rule matches, approve a specific quantity or reject it. Approval records a paper order only. Prices older than 15 minutes cannot be approved.</p></div><div id="opportunities" class="grid"></div><article class="panel"><h2>Paper execution history</h2><div id="orders" class="stack"></div></article></section>
-<footer>Your data is the evidence. Your approval is the decision. <span>Market Memory Pro · Development foundation</span></footer></div></main></body></html>
+<footer>Your data is the evidence. Your approval is the decision. <span>Market Memory Pro <span class="slash">/</span> Research Desk</span></footer>
+  </div>
+</div>
+</main>
+</body>
+</html>
