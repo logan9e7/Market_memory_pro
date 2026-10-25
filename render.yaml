@@ -19,3 +19,7 @@ services:
         sync: false
       - key: MARKET_MEMORY_SECURE_COOKIE
         value: '1'
+      - key: MARKET_MEMORY_REQUIRE_NATIVE_QUANT
+        value: '1'
+      - key: MARKET_MEMORY_PRODUCTION
+        value: '1'
