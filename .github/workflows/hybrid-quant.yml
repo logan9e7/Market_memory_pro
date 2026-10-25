@@ -9,7 +9,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install dependencies
-        run: python -m pip install -r requirements.lock pybind11
+        run: python -m pip install -r requirements.lock pybind11==3.1.0
       - name: Compile and run standalone C++ tests
         run: |
           g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic native/tests/quant_math_test.cpp -o /tmp/quant-test
