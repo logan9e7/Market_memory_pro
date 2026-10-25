@@ -10,6 +10,8 @@ from app.schema import SCHEMA
 def create_database(root, db_path=None):
     postgres_url = os.getenv("DATABASE_URL") if db_path is None else None
     database = Path(db_path or os.getenv("MARKET_MEMORY_DB", str(root / ".data" / "memory.sqlite3")))
+    if not postgres_url and db_path is None and os.getenv("MARKET_MEMORY_PRODUCTION") == "1":
+        raise RuntimeError("Production cannot use an ephemeral SQLite database")
     if not postgres_url:
         database.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
 

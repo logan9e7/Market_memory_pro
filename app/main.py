@@ -33,6 +33,8 @@ def create_app(db_path=None):
     # Fail closed if the deployment explicitly requires compiled native quant.
     if os.getenv("MARKET_MEMORY_REQUIRE_NATIVE_QUANT") == "1" and quant_engine_name() != "cpp-pybind11":
         raise RuntimeError("Required native C++ quant engine is not installed")
+    if db_path is None and os.getenv("MARKET_MEMORY_PRODUCTION") == "1" and not os.getenv("DATABASE_URL"):
+        raise RuntimeError("Production requires DATABASE_URL; refusing ephemeral SQLite")
     db = create_database(ROOT, db_path)
 
     app = FastAPI(title="Market Memory Pro", version="0.1.0")
@@ -59,6 +61,8 @@ def create_app(db_path=None):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Referrer-Policy"] = "same-origin"
+        if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000"
         response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
@@ -101,6 +105,8 @@ def create_app(db_path=None):
 
     @app.get("/health/ready")
     def ready():
+        if os.getenv("MARKET_MEMORY_REQUIRE_NATIVE_QUANT") == "1" and quant_engine_name() != "cpp-pybind11":
+            raise HTTPException(status_code=503, detail="Native quant engine unavailable")
         try:
             with db() as con:
                 con.execute("SELECT 1 FROM users LIMIT 1").fetchall()

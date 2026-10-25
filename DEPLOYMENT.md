@@ -112,3 +112,21 @@ strict requirement is not configured.
 
 The native code performs deterministic math only; HTTP, AI, Postgres,
 ownership enforcement and paper-only approval stay in Python.
+
+## Production fail-closed safeguards
+
+Set `MARKET_MEMORY_PRODUCTION=1` on the deployed Render service to reject
+accidental ephemeral SQLite startup if the PostgreSQL `DATABASE_URL` is
+missing. The disposable SQLite test harness remains supported via an explicit
+`db_path`. Keep `MARKET_MEMORY_REQUIRE_NATIVE_QUANT=1` to reject an
+unavailable compiled C++ engine on startup and at readiness.
+
+The numerical HTTP API rejects non-finite returns and bounds positive
+option notionals. A production migration role should eventually be separated
+from the runtime database role; never grant public Supabase API roles access.
+
+**Manual Render dashboard items:** The currently deployed service has an
+empty health-check path and uses `python -m uvicorn ...` rather than the
+Blueprint's `scripts/start-production.sh`. Set the health check path to
+`/health/ready` and start command to `bash scripts/start-production.sh`.
+Do not disable startup migration compatibility before updating that command.
