@@ -6,6 +6,7 @@ services:
     buildCommand: pip install --no-cache-dir -r requirements.lock
     startCommand: bash scripts/start-production.sh
     healthCheckPath: /health/ready
+    # Native extension is compiled by the requirements.lock editable install.
     autoDeployTrigger: checksPass
     envVars:
       - key: PYTHON_VERSION

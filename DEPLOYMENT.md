@@ -93,3 +93,22 @@ compile is not proof that the current commit is deployed.
 Before production release, test a backup restoration in an isolated database.
 Avoid any destructive schema change or retention deletion until backups,
 preflight verification, approval, and rollback procedures are established.
+
+## Native C++ deployment (October 2026)
+
+The existing Render dashboard uses `pip install --no-cache-dir -r requirements.lock`.
+The lockfile now includes an editable installation of this repository (`-e .`).
+The pinned `pyproject.toml` build requirements compile the
+`app._quant_core` C++17/pybind11 extension automatically using `setup.py`.
+A missing C++ compiler, failed build, or missing module fails CI/deployment
+instead of silently treating an untested binary as ready.
+
+Set `MARKET_MEMORY_REQUIRE_NATIVE_QUANT=1` for the Render service.
+This makes application startup fail closed if the native extension is absent.
+`GET /health/live` and `GET /health/ready` expose only a simple
+`quant_engine` identifier: `cpp-pybind11` when native is active.
+The Python fallback remains available in local development and tests if the
+strict requirement is not configured.
+
+The native code performs deterministic math only; HTTP, AI, Postgres,
+ownership enforcement and paper-only approval stay in Python.

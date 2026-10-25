@@ -20,6 +20,7 @@ from app.api_intelligence import make_intelligence_router
 from app.db_runtime import create_database
 from app.strategy_engine import make_strategy_engine
 from app.observability import install_observability
+from app.quant_hybrid import engine_name as quant_engine_name
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -29,6 +30,9 @@ def now():
 
 
 def create_app(db_path=None):
+    # Fail closed if the deployment explicitly requires compiled native quant.
+    if os.getenv("MARKET_MEMORY_REQUIRE_NATIVE_QUANT") == "1" and quant_engine_name() != "cpp-pybind11":
+        raise RuntimeError("Required native C++ quant engine is not installed")
     db = create_database(ROOT, db_path)
 
     app = FastAPI(title="Market Memory Pro", version="0.1.0")
@@ -92,7 +96,8 @@ def create_app(db_path=None):
 
     @app.get("/health/live", include_in_schema=False)
     def live():
-        return {"status": "alive", "revision": os.getenv("RENDER_GIT_COMMIT", "unknown")[:12]}
+        return {"status": "alive", "revision": os.getenv("RENDER_GIT_COMMIT", "unknown")[:12],
+                "quant_engine": quant_engine_name()}
 
     @app.get("/health/ready")
     def ready():
@@ -102,7 +107,8 @@ def create_app(db_path=None):
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Database unavailable") from exc
         return {"status": "ready", "database": "reachable", "execution_mode": "paper",
-                "revision": os.getenv("RENDER_GIT_COMMIT", "unknown")[:12]}
+                "revision": os.getenv("RENDER_GIT_COMMIT", "unknown")[:12],
+                "quant_engine": quant_engine_name()}
 
     @app.get("/")
     def index():
