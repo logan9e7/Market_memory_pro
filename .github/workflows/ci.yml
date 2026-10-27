@@ -22,3 +22,27 @@ jobs:
         env:
           MM_TEST_PYTHON: python
         run: bash scripts/test-postgres.sh
+
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.lock
+      - name: Install isolated browser test dependencies
+        run: |
+          pip install playwright==1.55.0
+          python -m playwright install --with-deps chromium
+      - name: Test actual Research Desk UI in Chromium
+        run: python tests/browser_smoke.py
+      - name: Save synthetic UI screenshot if available
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: research-desk-browser-smoke
+          path: browser-smoke.png
+          if-no-files-found: ignore
+          retention-days: 3

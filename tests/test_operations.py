@@ -34,6 +34,30 @@ class OperationsTests(unittest.TestCase):
                     self.assertEqual(connect.call_args.kwargs["sslmode"], "verify-full")
                     self.assertEqual(connect.call_args.kwargs["sslrootcert"], str(root))
 
+    def test_production_rejects_sqlite_without_database_url(self):
+        with patch.dict("os.environ", {"MARKET_MEMORY_PRODUCTION":"1","DATABASE_URL":"","MARKET_MEMORY_REQUIRE_NATIVE_QUANT":"0"}):
+            with self.assertRaisesRegex(RuntimeError, "DATABASE_URL"):
+                create_app()
+
+    def test_required_native_quant_fails_closed(self):
+        with patch.dict("os.environ", {"MARKET_MEMORY_REQUIRE_NATIVE_QUANT":"1"}):
+            with patch("app.main.quant_engine_name", return_value="python"):
+                with self.assertRaisesRegex(RuntimeError, "native C"):
+                    create_app()
+
+    def test_security_headers_and_private_state(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with TestClient(create_app(db_path=str(Path(folder) / "secure.sqlite3"))) as client:
+                response = client.get("/")
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.headers["X-Frame-Options"], "DENY")
+                self.assertIn("default-src 'self'", response.headers["Content-Security-Policy"])
+                private = client.get("/api/state")
+                self.assertEqual(private.status_code, 401)
+                self.assertEqual(private.headers["Cache-Control"], "no-store")
+                cross_origin = client.post("/api/register", json={"username":"untrusted","password":"Password!12345"},headers={"Origin":"https://evil.invalid"})
+                self.assertEqual(cross_origin.status_code, 403)
+
     def test_missing_pg_ssl_root_fails_closed(self):
         with patch.dict("os.environ", {"PGSSLROOTCERT": "/nonexistent/mm-ca.pem", "DATABASE_SSL_ROOT_CERT": ""}):
             with self.assertRaisesRegex(ValueError, "PGSSLROOTCERT"):
