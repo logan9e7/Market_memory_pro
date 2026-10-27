@@ -25,10 +25,10 @@ def request(path):
                 urllib.request.Request(ORIGIN + path, headers={"User-Agent":"MarketMemoryReleaseProbe/1"}),
                 timeout=30
             ) as response:
-                return response.status, dict(response.headers.items()), response.read(250000)
+                return response.status, {k.lower():v for k,v in response.headers.items()}, response.read(250000)
         except urllib.error.HTTPError as exc:
             if exc.code == 401:
-                return 401, dict(exc.headers.items()), exc.read(250000)
+                return 401, {k.lower():v for k,v in exc.headers.items()}, exc.read(250000)
             last = exc
         except (urllib.error.URLError, TimeoutError) as exc:
             last = exc
@@ -53,14 +53,14 @@ def verify():
         assert ready["revision"].startswith(EXPECTED_REVISION[:12]), "Unexpected deployed commit"
     index_status, headers, html = request("/")
     assert index_status == 200 and b"MARKET MEMORY" in html, "Landing page not served"
-    assert headers.get("X-Frame-Options", "").upper() == "DENY", "Frame protection missing"
-    assert "default-src 'self'" in headers.get("Content-Security-Policy", ""), "CSP missing"
+    assert headers.get("x-frame-options", "").upper() == "DENY", "Frame protection missing"
+    assert "default-src 'self'" in headers.get("content-security-policy", ""), "CSP missing"
     for asset in ("/static/app.js", "/static/style.css"):
         code, _, body = request(asset)
         assert code == 200 and len(body) > 100, f"Static asset missing: {asset}"
     private_status, private_headers, _ = request("/api/state")
     assert private_status == 401, "Unauthenticated account state exposed"
-    assert private_headers.get("Cache-Control") == "no-store", "Private API caching not disabled"
+    assert private_headers.get("cache-control") == "no-store", "Private API caching not disabled"
     print(json.dumps({"status":"passed","revision":ready["revision"],
                       "quant_engine":ready["quant_engine"],"database":"reachable",
                       "execution_mode":"paper","private_api":"401","assets":"ok"}))
