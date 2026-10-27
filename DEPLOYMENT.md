@@ -130,3 +130,31 @@ empty health-check path and uses `python -m uvicorn ...` rather than the
 Blueprint's `scripts/start-production.sh`. Set the health check path to
 `/health/ready` and start command to `bash scripts/start-production.sh`.
 Do not disable startup migration compatibility before updating that command.
+
+## Release gate (October 27, 2026)
+
+CI includes a disposable real-Chromium end-to-end journey
+(tests/browser_smoke.py) using a temporary SQLite database. It checks the
+Research Desk welcome screen, modal account creation, authenticated overview,
+capture, journal review, strategy qualification, paper-only approval,
+triggered alert, mobile overflow, logout and re-login with persisted data.
+This test never connects to production.
+
+The scheduled GitHub workflow .github/workflows/production-monitor.yml
+performs read-only checks of /health/live, /health/ready, native
+cpp-pybind11, the paper execution mode, HTTPS headers, static assets
+and a 401 response for an anonymous /api/state. It can be dispatched
+manually and runs daily. Run it again after deployment and compare its
+revision with the merged commit. It does not exercise authenticated
+production writes.
+
+Enable the release safeguards on the actual Render service by merging
+MARKET_MEMORY_PRODUCTION=1, MARKET_MEMORY_REQUIRE_NATIVE_QUANT=1,
+MARKET_MEMORY_SECURE_COOKIE=1, and
+MARKET_MEMORY_ORIGIN=https://market-memory-pro.onrender.com with
+existing secrets. Never replace database credentials.
+
+Disaster recovery gate: database backup and separate restore verification
+are still an operator/provider task. Do not restore over the live project
+or run disposable PostgreSQL tests against the live database. Do not
+claim full launch readiness without a verified restore and recovery plan.
