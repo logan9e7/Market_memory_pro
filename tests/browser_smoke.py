@@ -4,7 +4,7 @@ Run with a Python environment containing playwright. Uses the project's venv
 to run a separate server and disposable database; never seeds normal user data.
 """
 import os
-import secrets
+import sys
 import subprocess
 import tempfile
 import time
@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def run():
     with tempfile.TemporaryDirectory() as directory:
         with open(Path(directory) / "server.log", "w") as log:
-            process = subprocess.Popen([str(ROOT / ".venv/bin/python"), "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8001"], cwd=ROOT, env={**os.environ, "MARKET_MEMORY_DB":str(Path(directory) / "browser.sqlite3")}, stdout=log, stderr=log)
+            process = subprocess.Popen([sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8001"], cwd=ROOT, env={**{k:v for k,v in os.environ.items() if k not in ("DATABASE_URL", "MARKET_MEMORY_PRODUCTION", "MARKET_MEMORY_REQUIRE_NATIVE_QUANT", "MARKET_MEMORY_MIGRATIONS_AT_STARTUP")}, "MARKET_MEMORY_DB":str(Path(directory) / "browser.sqlite3")}, stdout=log, stderr=log)
             try:
                 for _ in range(100):
                     try:
@@ -30,16 +30,22 @@ def run():
                 else:
                     raise RuntimeError("Browser test server did not become ready")
                 with sync_playwright() as playwright:
-                    browser = playwright.chromium.launch(executable_path=os.getenv("CHROMIUM_PATH","/usr/bin/chromium"),args=["--no-sandbox"])
+                    browser = playwright.chromium.launch(**({"executable_path":os.environ["CHROMIUM_PATH"]} if os.getenv("CHROMIUM_PATH") else {}), args=["--no-sandbox"])
                     context = browser.new_context(viewport={"width":1280,"height":1000})
                     page = context.new_page()
                     errors=[]
                     page.on("pageerror",lambda error:errors.append(str(error)))
                     page.goto("http://127.0.0.1:8001")
+                    expect(page.get_by_role("heading",name="Trade less on impulse.",exact=False)).to_be_visible()
+                    page.get_by_role("button",name="Open your desk").click()
+                    expect(page.locator('#auth-dialog')).to_be_visible()
                     page.locator('#auth-form [name="username"]').fill("browser-researcher")
-                    page.locator('#auth-form [name="password"]').fill(secrets.token_urlsafe(20))
+                    page.locator('#auth-form [name="password"]').fill("BrowserSmoke!Strong2026")
                     page.get_by_role("button",name="Create account").click()
                     expect(page.locator('#workspace')).to_be_visible()
+                    expect(page.locator('[data-view="overview"]')).to_be_visible()
+                    page.get_by_role("button",name="Capture",exact=True).click()
+                    expect(page.locator('[data-view="capture"]')).to_be_visible()
                     page.locator('#quote-form [name="symbol"]').fill("TCS.NS")
                     page.locator('#quote-form [name="price"]').fill("110")
                     page.get_by_role("button",name="Save price & check rules").click()
@@ -98,12 +104,22 @@ def run():
                     else:
                         raise AssertionError("Close visit was not persisted")
                     page.bring_to_front()
-                    page.screenshot(path="/tmp/market-memory-pro-browser.png",full_page=True)
+                    page.screenshot(path=str(ROOT / "browser-smoke.png"),full_page=True)
                     page.set_viewport_size({"width":390,"height":844})
                     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"),"Mobile layout overflows"
+                    page.get_by_role("button",name="Sign out").click()
+                    expect(page.locator('#auth')).to_be_visible()
+                    page.get_by_role("button",name="Open your desk").click()
+                    page.locator('#auth-form [name="username"]').fill("browser-researcher")
+                    page.locator('#auth-form [name="password"]').fill("BrowserSmoke!Strong2026")
+                    page.get_by_role("button",name="Sign in",exact=True).last.click()
+                    expect(page.locator('#workspace')).to_be_visible()
+                    expect(page.locator('#metrics')).to_contain_text("Decisions logged")
+                    page.get_by_role("button",name="Memory",exact=True).click()
+                    expect(page.locator('#decisions')).to_contain_text("TCS.NS")
                     assert not errors,errors
                     browser.close()
-                    print("Browser workflow passed: account, quote, safe snapshot text, journal, 70% evidence, explicit paper approval, alert, close visit and mobile layout.")
+                    print("Browser workflow passed: themed landing, modal registration, overview, capture, safe snapshot text, journal, 70% evidence, explicit paper approval, alert, close visit, mobile layout, logout, login and persistence.")
             finally:
                 process.terminate()
                 process.wait(timeout=10)
