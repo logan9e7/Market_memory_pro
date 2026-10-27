@@ -158,3 +158,9 @@ Disaster recovery gate: database backup and separate restore verification
 are still an operator/provider task. Do not restore over the live project
 or run disposable PostgreSQL tests against the live database. Do not
 claim full launch readiness without a verified restore and recovery plan.
+
+The disposable PostgreSQL CI test now performs pg_dump followed by pg_restore
+into a distinct mm_restore_test database, verifying user/decision counts,
+public schema size and the versioned migration ledger. This validates the
+restore mechanics without touching production. A real Supabase production
+backup restore drill is still required before unrestricted launch.

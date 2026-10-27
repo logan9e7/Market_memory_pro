@@ -54,3 +54,20 @@ fi
 DATABASE_SSL_ROOT_CERT="$(cat "$cert_dir/server.crt")" PGSSLROOTCERT="$cert_dir/server.crt" \
   TEST_DATABASE_URL="postgresql://postgres@localhost:$test_port/mm_test" \
   MARKET_MEMORY_ALLOW_TEST_RESET=1 "$test_python" tests/postgres_smoke.py
+
+# Exercise a real pg_dump/pg_restore in a SEPARATE disposable database.
+# This is a test of the restore procedure, NOT a restore of production backups.
+docker exec "$container_name" pg_dump -U postgres -Fc -d mm_test -f /tmp/mm_test.dump
+docker exec "$container_name" createdb -U postgres mm_restore_test
+docker exec "$container_name" pg_restore -U postgres --no-owner --no-acl -d mm_restore_test /tmp/mm_test.dump
+source_counts="$(docker exec "$container_name" psql -U postgres -d mm_test -Atqc "SELECT (SELECT count(*) FROM users), (SELECT count(*) FROM decisions), (SELECT count(*) FROM mm_schema_migrations), (SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE')")"
+restored_counts="$(docker exec "$container_name" psql -U postgres -d mm_restore_test -Atqc "SELECT (SELECT count(*) FROM users), (SELECT count(*) FROM decisions), (SELECT count(*) FROM mm_schema_migrations), (SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE')")"
+if [ "$source_counts" != "$restored_counts" ]; then
+  echo "Isolated restore validation failed: source and restored row/schema counts differ" >&2
+  exit 1
+fi
+if [ "$(docker exec "$container_name" psql -U postgres -d mm_restore_test -Atqc "SELECT count(*) FROM mm_schema_migrations")" != 3 ]; then
+  echo "Isolated restore validation failed: migration ledger missing" >&2
+  exit 1
+fi
+echo "Disposable PostgreSQL backup/restore drill passed (row counts, schema and migration ledger)."
