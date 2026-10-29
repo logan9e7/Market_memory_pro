@@ -49,6 +49,7 @@ def run():
                     expect(page.locator('[data-view="overview"]')).to_be_visible()
                     page.get_by_role("button",name="Discovery",exact=True).click()
                     expect(page.locator('[data-view="discovery"]')).to_be_visible()
+                    page.locator('#discovery-auto').uncheck()
                     page.locator('[data-discovery-tab="capture"]').click()
                     # A synthetic quote validates UI behavior without depending on an exchange.
                     page.route("**/api/discovery/prices?*", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps({"provider":"Test exchange", "quotes":[{"symbol":"BTCUSDT","price":123.45,"currency":"USDT","provider":"Test exchange","as_of":datetime.now(timezone.utc).isoformat(),"change_percent":1,"high":125,"low":120,"volume":10}],"errors":[]})))
