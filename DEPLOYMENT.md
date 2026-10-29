@@ -179,3 +179,30 @@ Supabase's Free plan does **not** include provider-managed daily database
 backups. See `PRODUCTION_READINESS.md` for the optional encrypted offsite
 backup workflow, its GitHub configuration, and a separate real-data restore
 drill. A synthetic CI restore is not evidence of a real production backup.
+
+## Email verification for new accounts
+
+New production accounts require a verified email before login. The registration
+endpoint sends a single-use 30-minute verification link and creates **no
+session** until verification is complete. Tokens are stored only as SHA-256
+digests and appear in the email URL fragment (not HTTP query strings).
+Resend has a 60-second cooldown and uses the existing authentication budget.
+Existing accounts are grandfathered to preserve their data and access.
+
+Set the following **Render environment secrets** (never commit credentials):
+- `MARKET_MEMORY_SMTP_HOST` (provider's authenticated SMTP host)
+- `MARKET_MEMORY_SMTP_PORT` (`465` for implicit TLS or `587` for STARTTLS)
+- `MARKET_MEMORY_SMTP_USER` and `MARKET_MEMORY_SMTP_PASSWORD`
+- `MARKET_MEMORY_SMTP_FROM` (verified sender address)
+- `MARKET_MEMORY_ORIGIN=https://market-memory-pro.onrender.com`
+
+The SMTP connection uses certificate-verified TLS and SMTP authentication.
+If these settings are missing, **new production registration returns 503**;
+existing users can still sign in. Do not disable verification in production.
+The email provider must authorize the sender and permit transactional messages.
+
+**Deployment order:** apply additive PostgreSQL migration
+`004_email_verification.sql` using `python -m app.migrations apply` in an
+authorized, controlled step **before** deploying code that requires the new
+columns. Production web startup is check-only and will reject an unapplied
+migration. Then deploy, configure SMTP secrets, and test a real inbox.

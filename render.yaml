@@ -17,6 +17,18 @@ services:
         sync: false
       - key: MARKET_MEMORY_ORIGIN
         sync: false
+      # Required for registration: SMTP credentials are configured as Render
+      # secrets. Production registration fails closed until all are present.
+      - key: MARKET_MEMORY_SMTP_HOST
+        sync: false
+      - key: MARKET_MEMORY_SMTP_PORT
+        value: '465'
+      - key: MARKET_MEMORY_SMTP_USER
+        sync: false
+      - key: MARKET_MEMORY_SMTP_PASSWORD
+        sync: false
+      - key: MARKET_MEMORY_SMTP_FROM
+        sync: false
       - key: MARKET_MEMORY_SECURE_COOKIE
         value: '1'
       - key: MARKET_MEMORY_REQUIRE_NATIVE_QUANT
