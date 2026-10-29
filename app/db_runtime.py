@@ -37,7 +37,11 @@ def create_database(root, db_path=None):
         if postgres_url:
             # Backwards-compatible for Render services that still use the old start command.
             # Only pending, checksum-verified migrations execute; no repeated schema DDL.
-            check_only = os.getenv("MARKET_MEMORY_MIGRATIONS_AT_STARTUP", "1") != "1"
+            # Never apply new DDL implicitly on production web-process startup.
+            # The explicit scripts/start-production.sh migrator remains the
+            # supported path for schema upgrades. Existing schema is checked.
+            default_apply = "0" if os.getenv("MARKET_MEMORY_PRODUCTION") == "1" else "1"
+            check_only = os.getenv("MARKET_MEMORY_MIGRATIONS_AT_STARTUP", default_apply) != "1"
             apply_migrations(con, root / "migrations", check_only=check_only)
         else:
             con.execute("PRAGMA journal_mode=WAL")
