@@ -55,7 +55,7 @@ class PostgresWorkflowTests(WorkflowTests):
             root=Path(__file__).resolve().parent.parent / "migrations"
             versions=con.connection.execute(
                 "SELECT version FROM mm_schema_migrations ORDER BY version").fetchall()
-            self.assertEqual([r["version"] for r in versions],[1,2,3,4])
+            self.assertEqual([r["version"] for r in versions],[1,2,3,4,5])
             ledger=con.connection.execute(
                 "SELECT relrowsecurity FROM pg_class WHERE relname='mm_schema_migrations'"
             ).fetchone()
@@ -155,7 +155,7 @@ class PostgresWorkflowTests(WorkflowTests):
                 "INSERT INTO users(username,password_hash) VALUES(%s,%s)",
                 ("existing-user", "preexisting-hash")
             )
-            self.assertEqual(apply_migrations(con,root),[1,2,3,4])
+            self.assertEqual(apply_migrations(con,root),[1,2,3,4,5])
             saved=con.connection.execute(
                 "SELECT username,password_hash FROM users WHERE username=%s",
                 ("existing-user",)
