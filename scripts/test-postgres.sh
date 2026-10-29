@@ -71,3 +71,33 @@ if [ "$(docker exec "$container_name" psql -U postgres -d mm_restore_test -Atqc 
   exit 1
 fi
 echo "Disposable PostgreSQL backup/restore drill passed (row counts, schema and migration ledger)."
+
+# End-to-end encrypted backup from a disposable TLS PostgreSQL database.
+# This uses an ephemeral age identity; production keys never enter CI.
+if command -v age >/dev/null 2>&1 && command -v age-keygen >/dev/null 2>&1; then
+  age-keygen -o "$cert_dir/age-test-identity.txt" >/dev/null 2>&1
+  recipient="$(age-keygen -y "$cert_dir/age-test-identity.txt")"
+  mkdir -p "$cert_dir/encrypted-backups"
+  DATABASE_URL="postgresql://postgres@localhost:$test_port/mm_test" \
+    DATABASE_SSL_ROOT_CERT="$(cat "$cert_dir/server.crt")" \
+    BACKUP_AGE_RECIPIENT="$recipient" BACKUP_PG_IMAGE=postgres:16-alpine \
+    BACKUP_OUTPUT_DIR="$cert_dir/encrypted-backups" bash scripts/backup-production.sh
+  encrypted_file="$(find "$cert_dir/encrypted-backups" -maxdepth 1 -name '*.dump.age' -print -quit)"
+  test -n "$encrypted_file"
+  sha256sum -c "$encrypted_file.sha256"
+  docker exec "$container_name" createdb -U postgres mm_encrypted_restore_test
+  # PostgreSQL creates public by default; the archive includes CREATE SCHEMA public.
+  # Drop it ONLY in this newly created disposable restore database.
+  docker exec "$container_name" psql -U postgres -d mm_encrypted_restore_test -c "DROP SCHEMA public CASCADE" >/dev/null
+  age -d -i "$cert_dir/age-test-identity.txt" "$encrypted_file" | \
+    docker exec -i "$container_name" pg_restore -U postgres --no-owner --no-acl \
+      -d mm_encrypted_restore_test
+  encrypted_counts="$(docker exec "$container_name" psql -U postgres -d mm_encrypted_restore_test -Atqc "SELECT (SELECT count(*) FROM users), (SELECT count(*) FROM decisions), (SELECT count(*) FROM mm_schema_migrations), (SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE')")"
+  if [ "$source_counts" != "$encrypted_counts" ]; then
+    echo "Encrypted backup restore mismatch" >&2
+    exit 1
+  fi
+  echo "Encrypted age backup and isolated restore drill passed."
+else
+  echo "Skipping encrypted backup drill locally: age CLI not installed."
+fi

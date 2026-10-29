@@ -1,5 +1,6 @@
 """Operational middleware and trust-store configuration regression tests."""
 import json
+import os
 import logging
 import tempfile
 import unittest
@@ -57,6 +58,43 @@ class OperationsTests(unittest.TestCase):
                 self.assertEqual(private.headers["Cache-Control"], "no-store")
                 cross_origin = client.post("/api/register", json={"username":"untrusted","password":"Password!12345"},headers={"Origin":"https://evil.invalid"})
                 self.assertEqual(cross_origin.status_code, 403)
+
+    def test_production_web_startup_is_read_only_by_default(self):
+        from app.db_runtime import create_database
+        with patch.dict("os.environ", {
+            "MARKET_MEMORY_PRODUCTION": "1",
+            "DATABASE_URL": "postgresql://db.example.invalid/market",
+        }):
+            os.environ.pop("MARKET_MEMORY_MIGRATIONS_AT_STARTUP", None)
+            with patch("app.db_runtime.PostgresConnection"), patch("app.db_runtime.apply_migrations") as migrations:
+                create_database(Path("/tmp"))
+                self.assertTrue(migrations.call_args.kwargs["check_only"])
+
+    def test_readiness_checks_schema_ledger_without_writing(self):
+        from app.readiness import verify_database_readiness
+        from unittest.mock import MagicMock
+        con = MagicMock()
+        with patch("app.readiness.apply_migrations") as migrations:
+            verify_database_readiness(con, Path("/tmp/migrations"), postgres=True)
+            migrations.assert_called_once_with(con, Path("/tmp/migrations"), check_only=True)
+        con.execute.assert_called_once_with("SELECT 1 FROM users LIMIT 1")
+
+    def test_readiness_refuses_schema_drift(self):
+        from app.migrations import MigrationError
+        with tempfile.TemporaryDirectory() as folder:
+            with TestClient(create_app(db_path=str(Path(folder) / "schema.db"))) as client:
+                with patch("app.main.verify_database_readiness", side_effect=MigrationError("Pending migration")):
+                    response = client.get("/health/ready")
+                self.assertEqual(response.status_code, 503)
+                self.assertEqual(response.json()["detail"], "Database unavailable")
+                self.assertEqual(client.get("/health/live").status_code, 200)
+
+    def test_readiness_does_not_run_postgres_checks_for_sqlite(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with TestClient(create_app(db_path=str(Path(folder) / "schema.db"))) as client:
+                with patch("app.readiness.apply_migrations") as migrations:
+                    self.assertEqual(client.get("/health/ready").status_code, 200)
+                    migrations.assert_not_called()
 
     def test_missing_pg_ssl_root_fails_closed(self):
         with patch.dict("os.environ", {"PGSSLROOTCERT": "/nonexistent/mm-ca.pem", "DATABASE_SSL_ROOT_CERT": ""}):

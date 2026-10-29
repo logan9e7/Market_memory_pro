@@ -18,6 +18,7 @@ from app.api_quant import make_quant_router
 from app.api_markets import make_markets_router
 from app.api_intelligence import make_intelligence_router
 from app.db_runtime import create_database
+from app.readiness import verify_database_readiness
 from app.strategy_engine import make_strategy_engine
 from app.observability import install_observability
 from app.quant_hybrid import engine_name as quant_engine_name
@@ -109,11 +110,11 @@ def create_app(db_path=None):
             raise HTTPException(status_code=503, detail="Native quant engine unavailable")
         try:
             with db() as con:
-                con.execute("SELECT 1 FROM users LIMIT 1").fetchall()
+                verify_database_readiness(con, ROOT / "migrations", postgres=db_path is None and bool(os.getenv("DATABASE_URL")))
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Database unavailable") from exc
-        return {"status": "ready", "database": "reachable", "execution_mode": "paper",
-                "revision": os.getenv("RENDER_GIT_COMMIT", "unknown")[:12],
+        return {"status": "ready", "database": "reachable", "schema": "current",
+                "execution_mode": "paper", "revision": os.getenv("RENDER_GIT_COMMIT", "unknown")[:12],
                 "quant_engine": quant_engine_name()}
 
     @app.get("/")

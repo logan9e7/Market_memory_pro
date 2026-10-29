@@ -22,9 +22,11 @@ version. Existing application accounts remain in the application's users table.
    a ledger table, and a transaction-scoped PostgreSQL advisory lock. Run
    `python -m app.migrations check` to verify and
    `python -m app.migrations apply` to apply pending additions.
-   The current free-tier Render service still runs the versioned migration
-   checker/runner during startup (default compatibility setting), but only
-   pending migrations execute; previously applied SQL is never replayed.
+   In production, the default web startup is now a **read-only migration
+   checksum/ledger check**; it never implicitly applies pending DDL.
+   A dedicated `python -m app.migrations apply` step or the
+   `scripts/start-production.sh` script must apply new migrations before
+   a new app version can start. Previously applied SQL is never replayed.
    When a separate migration deploy step becomes available, set
    `MARKET_MEMORY_MIGRATIONS_AT_STARTUP=0` and migrate before deploying.
 
@@ -82,9 +84,9 @@ Headers, cookies, queries, bodies and journal text are **not logged**.
 
 The Blueprint's start script applies **only pending versioned migrations**
 in a separate process and then runs Uvicorn with a read-only startup migration
-check. Older dashboard-configured services can still use the compatibility
-startup migrator. Do not disable both migration paths unless a separate
-migration process has run successfully.
+check. Older dashboard-configured services can use the safe read-only startup
+migration preflight in production. Pending migrations cause startup to fail
+until a separate migration process runs. Never disable both migration paths.
 
 If Render's autodeploy is not delivering GitHub main commits, investigate the
 GitHub-Render installation and actual branch settings. An old successful
@@ -164,3 +166,16 @@ into a distinct mm_restore_test database, verifying user/decision counts,
 public schema size and the versioned migration ledger. This validates the
 restore mechanics without touching production. A real Supabase production
 backup restore drill is still required before unrestricted launch.
+
+## Readiness and backup (October 29, 2026)
+
+The `/health/ready` endpoint now verifies the schema migration ledger,
+migration checksums, and database connectivity before reporting `schema=current`.
+The production web startup defaults to **check-only**, including when the
+existing Render dashboard still runs Uvicorn directly. Apply future migrations
+using the explicit migration command in a controlled deployment process.
+
+Supabase's Free plan does **not** include provider-managed daily database
+backups. See `PRODUCTION_READINESS.md` for the optional encrypted offsite
+backup workflow, its GitHub configuration, and a separate real-data restore
+drill. A synthetic CI restore is not evidence of a real production backup.

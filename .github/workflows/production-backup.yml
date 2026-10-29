@@ -1,0 +1,33 @@
+name: Encrypted offsite database backup
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 1 * * *'
+permissions:
+  contents: read
+jobs:
+  backup:
+    if: ${{ vars.MARKET_MEMORY_BACKUP_ENABLED == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: ${{ secrets.MARKET_MEMORY_BACKUP_DATABASE_URL }}
+      DATABASE_SSL_ROOT_CERT: ${{ secrets.MARKET_MEMORY_BACKUP_DB_CA_PEM }}
+      BACKUP_AGE_RECIPIENT: ${{ vars.MARKET_MEMORY_BACKUP_AGE_RECIPIENT }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install age encryption CLI
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y age
+      - name: Export and encrypt without writing plaintext to disk
+        run: bash scripts/backup-production.sh
+      - name: Retain only encrypted dump and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-memory-encrypted-backup
+          path: |
+            backups/*.dump.age
+            backups/*.dump.age.sha256
+          if-no-files-found: error
+          retention-days: 14
