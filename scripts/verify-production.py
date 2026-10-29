@@ -47,6 +47,7 @@ def verify():
     ready = json.loads(ready_body)
     assert live["status"] == "alive" and ready["status"] == "ready", "Invalid health payload"
     assert ready["database"] == "reachable" and ready["execution_mode"] == "paper", "Wrong database/execution mode"
+    assert ready.get("schema") == "current", "Database migration ledger is not verified"
     assert live["quant_engine"] == ready["quant_engine"] == EXPECTED_NATIVE, "Native engine mismatch"
     assert ready["revision"] and ready["revision"] != "unknown", "Deployment revision unavailable"
     if EXPECTED_REVISION:

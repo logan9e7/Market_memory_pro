@@ -16,7 +16,7 @@ class ProductionProbeTests(unittest.TestCase):
             "/health/live": (200, {}, json.dumps({"status":"alive","revision":"abc123",
                 "quant_engine":"cpp-pybind11"}).encode()),
             "/health/ready": (200, {}, json.dumps({"status":"ready","revision":"abc123",
-                "database":"reachable","execution_mode":"paper",
+                "database":"reachable","schema":"current","execution_mode":"paper",
                 "quant_engine":"cpp-pybind11"}).encode()),
             "/": (200, {"x-frame-options":"DENY",
                 "content-security-policy":"default-src 'self'; frame-ancestors 'none'"},
