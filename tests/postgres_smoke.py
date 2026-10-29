@@ -78,6 +78,47 @@ class PostgresWorkflowTests(WorkflowTests):
         finally:
             con.close()
 
+    def test_postgres_registration_requires_verified_email(self):
+        from unittest.mock import patch
+        from fastapi.testclient import TestClient
+        tokens = []
+        with patch.dict(os.environ, {"MARKET_MEMORY_EMAIL_VERIFICATION_REQUIRED": "1"}), \
+             patch("app.api_auth.delivery_ready", return_value=True), \
+             patch("app.api_auth.send_verification_email",
+                   side_effect=lambda address, token: tokens.append(token)):
+            with TestClient(self.app) as client:
+                register = client.post("/api/register", json={
+                    "username": "postgres-email-user",
+                    "email": "pg-email@example.com",
+                    "password": "Correct-Password123!"
+                })
+                self.assertEqual(register.status_code, 201, register.text)
+                login = client.post("/api/login", json={
+                    "username": "postgres-email-user", "password": "Correct-Password123!"
+                })
+                self.assertEqual(login.status_code, 403, login.text)
+                verify = client.post("/api/auth/verify-email", json={"token": tokens[0]})
+                self.assertEqual(verify.status_code, 200, verify.text)
+                self.assertEqual(client.post("/api/login", json={
+                    "username": "postgres-email-user",
+                    "password": "Correct-Password123!"
+                }).status_code, 200)
+        con = PostgresConnection(url)
+        try:
+            row = con.connection.execute(
+                "SELECT relrowsecurity FROM pg_class WHERE relname='email_verifications'"
+            ).fetchone()
+            self.assertTrue(row["relrowsecurity"])
+            grants = con.connection.execute("""
+                SELECT count(*) AS n FROM information_schema.role_table_grants
+                WHERE table_name='email_verifications'
+                  AND grantee IN ('anon','authenticated')
+            """).fetchone()
+            self.assertEqual(grants["n"], 0)
+            con.commit()
+        finally:
+            con.close()
+
     def test_public_supabase_roles_cannot_read_application_tables(self):
         import psycopg
         con=PostgresConnection(url)
