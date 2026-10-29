@@ -22,3 +22,10 @@ footer{border-top:1px solid var(--border);margin-top:48px;padding:25px 0 12px;di
 .discovery-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:16px;margin-top:20px}
 .discovery-card h3{margin:10px 0}.discovery-price{font-size:1.7rem;font-variant-numeric:tabular-nums}.price-up{color:#6edcb1}.price-down{color:#ff9b9b}
 .discovery-card .actions{margin-top:18px;flex-wrap:wrap}#discovery-status{font-size:.85rem;line-height:1.6}#discovery-auto{width:auto;display:inline-block;margin-right:8px}
+.discovery-tabs{display:flex;gap:6px;overflow-x:auto;margin:0 0 18px;padding:6px;border:1px solid var(--line,#314047);border-radius:12px}
+.discovery-tabs button{white-space:nowrap;background:transparent;color:inherit;border:0;flex:1;min-width:max-content;padding:10px 16px}
+.discovery-tabs button[aria-selected="true"]{background:#c7f2c4;color:#102018}
+[data-discovery-panel="capture"]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+[data-discovery-panel][hidden]{display:none!important}
+.discovery-card .meta{font-size:.75rem}.discovery-card{padding:16px}
+@media(max-width:700px){[data-discovery-panel="capture"]{grid-template-columns:1fr}.discovery-tabs button{padding:9px 12px}}

@@ -33,7 +33,7 @@ def make_discovery_router(db, user):
                 return cache[key][1]
             try:
                 async with httpx.AsyncClient(timeout=8) as client:
-                    response = await client.get('https://data-api.binance.vision/api/v3/ticker/24hr', params={'symbols': json.dumps(requested)})
+                    response = await client.get('https://data-api.binance.vision/api/v3/ticker/24hr', params={'symbols': json.dumps(requested, separators=(',', ':'))})
                 if response.status_code == 400:
                     raise HTTPException(422, 'Unknown crypto pair. Try BTCUSDT or ETHUSDT.')
                 response.raise_for_status()

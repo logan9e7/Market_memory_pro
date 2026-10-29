@@ -38,6 +38,7 @@ class DiscoveryTests(unittest.TestCase):
 
     def test_provider_prices_cache_and_failure(self):
         async def provider(*args,**kwargs):
+            self.assertNotIn(' ', kwargs['params']['symbols'])
             return httpx.Response(200,request=httpx.Request('GET','https://data-api.binance.vision'),json=[{'symbol':'BTCUSDT','lastPrice':'100','priceChangePercent':'2','highPrice':'102','lowPrice':'97','volume':'42','closeTime':1793290000000}])
         with patch('app.api_discovery.httpx.AsyncClient.get',side_effect=provider) as call:
             result=self.client.get('/api/discovery/prices?symbols=BTCUSDT')
@@ -45,6 +46,8 @@ class DiscoveryTests(unittest.TestCase):
             self.assertEqual(result.json()['quotes'][0]['price'],100)
             self.client.get('/api/discovery/prices?symbols=BTCUSDT')
             self.assertEqual(call.call_count,1)
+            self.assertEqual(self.client.get('/api/discovery/prices?symbols=BTCUSDT,ETHUSDT,SOLUSDT').status_code,200)
+            self.assertEqual(call.call_args.kwargs['params']['symbols'], '["BTCUSDT","ETHUSDT","SOLUSDT"]')
         with patch('app.api_discovery.httpx.AsyncClient.get',side_effect=httpx.ConnectError('offline')):
             self.assertEqual(self.client.get('/api/discovery/prices?symbols=ETHUSDT').status_code,503)
         self.assertEqual(self.client.get('/api/state').json()['quotes'],[])

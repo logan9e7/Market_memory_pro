@@ -47,6 +47,7 @@ def run():
                     expect(page.locator('[data-view="overview"]')).to_be_visible()
                     page.get_by_role("button",name="Discovery",exact=True).click()
                     expect(page.locator('[data-view="discovery"]')).to_be_visible()
+                    page.locator('[data-discovery-tab="capture"]').click()
                     page.locator('#quote-form [name="symbol"]').fill("TCS.NS")
                     page.locator('#quote-form [name="price"]').fill("110")
                     page.get_by_role("button",name="Save price & check rules").click()
@@ -55,10 +56,12 @@ def run():
                     page.locator('#snapshot-form [name="note"]').fill('<img src=x onerror="alert(1)"> user note')
                     page.get_by_role("button",name="Keep this moment").click()
                     expect(page.locator('#notice')).to_have_text("Snapshot preserved.")
+                    page.locator('[data-discovery-tab="alerts"]').click()
                     page.locator('#alert-form [name="symbol"]').fill("TCS.NS")
                     page.locator('#alert-form [name="target"]').fill("120")
                     page.get_by_role("button",name="Set alert").click()
                     expect(page.locator('#alerts')).to_contain_text("Watching recorded prices")
+                    page.locator('[data-discovery-tab="journal"]').click()
                     form=page.locator('#decision-form')
                     for name,value in {"symbol":"TCS.NS","setup":"breakout","price":"101","trigger_price":"100","note":"Observed breakout; user-reviewed evidence."}.items():
                         form.locator(f'[name="{name}"]').fill(value)
@@ -90,9 +93,11 @@ def run():
                     expect(page.locator('#orders')).to_contain_text("BUY TCS.NS")
                     assert len(context.request.get("http://127.0.0.1:8001/api/state").json()["paper_orders"])==1
                     page.locator('[data-tab="discovery"]').click()
+                    page.locator('[data-discovery-tab="capture"]').click()
                     page.locator('#quote-form [name="symbol"]').fill("TCS.NS")
                     page.locator('#quote-form [name="price"]').fill("125")
                     page.get_by_role("button",name="Save price & check rules").click()
+                    page.locator('[data-discovery-tab="alerts"]').click()
                     expect(page.locator('#alerts')).to_contain_text("Triggered")
                     # A genuine hidden-tab event captures the close visit.
                     other=context.new_page()
