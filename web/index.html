@@ -7,7 +7,7 @@
 <meta name="description" content="A private research desk for market observations, decisions and evidence-backed learning.">
 <title>Market Memory Pro — Your Research Desk</title>
 <link rel="stylesheet" href="/static/style.css?v=desk-20261025-1">
-<script defer src="/static/app.js?v=desk-20261025-1"></script>
+<script defer src="/static/app.js?v=email-verify-20261029"></script>
 </head>
 <body>
 <header class="site-header">
@@ -46,11 +46,13 @@
   <div id="auth-feedback" role="status" aria-live="polite"></div>
   <form id="auth-form">
     <label>Username<input name="username" autocomplete="username" required minlength="3" maxlength="80"></label>
+    <label>Email (for new accounts)<input name="email" type="email" autocomplete="email" maxlength="254" placeholder="you@example.com"></label>
     <label>Password<input name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="256"></label>
     <label class="check"><input type="checkbox" name="shared_device"> Shared or public device (2-hour session; closes on browser exit)</label>
     <div class="actions"><button name="intent" value="login">Sign in</button><button name="intent" value="register" class="secondary">Create account</button></div>
   </form>
-  <p class="muted auth-hint">New accounts need 12+ characters with uppercase, lowercase, number and symbol.</p>
+  <p class="muted auth-hint">New accounts need an email address and a 12+ character password with uppercase, lowercase, number and symbol. Verify your email before signing in.</p>
+  <form id="resend-verification-form"><p class="muted">Didn't receive your verification link?</p><label>Username<input name="username" autocomplete="username" minlength="3" maxlength="80" required></label><label>Email<input name="email" type="email" autocomplete="email" maxlength="254" required></label><button type="submit" class="secondary">Resend verification email</button></form>
 </dialog>
 <div id="workspace" class="app-shell" hidden>
   <aside class="sidebar">

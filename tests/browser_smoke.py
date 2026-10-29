@@ -40,6 +40,7 @@ def run():
                     page.get_by_role("button",name="Open your desk").click()
                     expect(page.locator('#auth-dialog')).to_be_visible()
                     page.locator('#auth-form [name="username"]').fill("browser-researcher")
+                    page.locator('#auth-form [name="email"]').fill("browser-researcher@example.com")
                     page.locator('#auth-form [name="password"]').fill("BrowserSmoke!Strong2026")
                     page.get_by_role("button",name="Create account").click()
                     expect(page.locator('#workspace')).to_be_visible()

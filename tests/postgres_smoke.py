@@ -55,7 +55,7 @@ class PostgresWorkflowTests(WorkflowTests):
             root=Path(__file__).resolve().parent.parent / "migrations"
             versions=con.connection.execute(
                 "SELECT version FROM mm_schema_migrations ORDER BY version").fetchall()
-            self.assertEqual([r["version"] for r in versions],[1,2,3])
+            self.assertEqual([r["version"] for r in versions],[1,2,3,4])
             ledger=con.connection.execute(
                 "SELECT relrowsecurity FROM pg_class WHERE relname='mm_schema_migrations'"
             ).fetchone()
@@ -75,6 +75,47 @@ class PostgresWorkflowTests(WorkflowTests):
                 with self.assertRaises(MigrationError):
                     apply_migrations(con,folder,check_only=True)
             con.rollback()
+        finally:
+            con.close()
+
+    def test_postgres_registration_requires_verified_email(self):
+        from unittest.mock import patch
+        from fastapi.testclient import TestClient
+        tokens = []
+        with patch.dict(os.environ, {"MARKET_MEMORY_EMAIL_VERIFICATION_REQUIRED": "1"}), \
+             patch("app.api_auth.delivery_ready", return_value=True), \
+             patch("app.api_auth.send_verification_email",
+                   side_effect=lambda address, token: tokens.append(token)):
+            with TestClient(self.app) as client:
+                register = client.post("/api/register", json={
+                    "username": "postgres-email-user",
+                    "email": "pg-email@example.com",
+                    "password": "Correct-Password123!"
+                })
+                self.assertEqual(register.status_code, 201, register.text)
+                login = client.post("/api/login", json={
+                    "username": "postgres-email-user", "password": "Correct-Password123!"
+                })
+                self.assertEqual(login.status_code, 403, login.text)
+                verify = client.post("/api/auth/verify-email", json={"token": tokens[0]})
+                self.assertEqual(verify.status_code, 200, verify.text)
+                self.assertEqual(client.post("/api/login", json={
+                    "username": "postgres-email-user",
+                    "password": "Correct-Password123!"
+                }).status_code, 200)
+        con = PostgresConnection(url)
+        try:
+            row = con.connection.execute(
+                "SELECT relrowsecurity FROM pg_class WHERE relname='email_verifications'"
+            ).fetchone()
+            self.assertTrue(row["relrowsecurity"])
+            grants = con.connection.execute("""
+                SELECT count(*) AS n FROM information_schema.role_table_grants
+                WHERE table_name='email_verifications'
+                  AND grantee IN ('anon','authenticated')
+            """).fetchone()
+            self.assertEqual(grants["n"], 0)
+            con.commit()
         finally:
             con.close()
 
@@ -114,7 +155,7 @@ class PostgresWorkflowTests(WorkflowTests):
                 "INSERT INTO users(username,password_hash) VALUES(%s,%s)",
                 ("existing-user", "preexisting-hash")
             )
-            self.assertEqual(apply_migrations(con,root),[1,2,3])
+            self.assertEqual(apply_migrations(con,root),[1,2,3,4])
             saved=con.connection.execute(
                 "SELECT username,password_hash FROM users WHERE username=%s",
                 ("existing-user",)

@@ -17,6 +17,12 @@ services:
         sync: false
       - key: MARKET_MEMORY_ORIGIN
         sync: false
+      # Free Render blocks outbound SMTP. Use HTTPS transactional email API.
+      # Production signup fails closed until the provider key/sender are set.
+      - key: MARKET_MEMORY_RESEND_API_KEY
+        sync: false
+      - key: MARKET_MEMORY_EMAIL_FROM
+        sync: false
       - key: MARKET_MEMORY_SECURE_COOKIE
         value: '1'
       - key: MARKET_MEMORY_REQUIRE_NATIVE_QUANT

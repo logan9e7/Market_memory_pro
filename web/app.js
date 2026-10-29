@@ -57,7 +57,50 @@ async function refresh() {
   setTab(activeTab);
 }
 
-$('#auth-form').addEventListener('submit', event => { event.preventDefault(); const path = event.submitter.value; submit(event.target, async () => { await api(path,fields(event.target)); event.target.reset(); await refresh(); await captureVisit('open'); await refresh(); notice('Your notebook is ready.'); }); });
+$('#auth-form').addEventListener('submit', event => {
+  event.preventDefault();
+  const path = event.submitter?.value;
+  if (!['login','register'].includes(path)) return;
+  submit(event.target, async () => {
+    const payload = fields(event.target);
+    if (path === 'register' && !payload.email) throw Error('Enter your email address to create an account.');
+    const result = await api(path,payload);
+    if (path === 'register' && result.verification_required) {
+      event.target.reset();
+      notice('Verification email sent. Check your inbox and spam folder.');
+      $('#auth-feedback').textContent = 'Check your inbox and open the verification link. Then sign in.';
+      return;
+    }
+    event.target.reset();
+    await refresh();
+    await captureVisit('open');
+    await refresh();
+    notice('Your notebook is ready.');
+  });
+});
+$('#resend-verification-form').addEventListener('submit', event => {
+  event.preventDefault();
+  submit(event.target, async () => {
+    await api('auth/resend-verification', fields(event.target));
+    notice('If verification is pending, check your inbox for a new link.');
+  });
+});
+async function verifyEmailFromLink() {
+  const match = window.location.hash.match(/^#verify-email=([A-Za-z0-9_-]{32,128})$/);
+  if (!match) return;
+  // Remove secret token from the address bar/history before network calls.
+  history.replaceState(null, '', window.location.pathname + window.location.search);
+  try {
+    const result = await api('auth/verify-email', {token: match[1]});
+    openAuthDialog();
+    notice(result.message);
+    $('#auth-feedback').textContent = result.message;
+  } catch (error) {
+    openAuthDialog();
+    notice(error.message, true);
+    $('#auth-feedback').textContent = error.message;
+  }
+}
 const bindings = [['quote-form','quotes',['price'],'Price recorded. Alerts and eligible strategies checked.'],['snapshot-form','snapshots',[],'Snapshot preserved.'],['decision-form','decisions',['price','trigger_price'],'Decision saved. Review it when the outcome is known.'],['alert-form','alerts',['target'],'Alert saved.']];
 bindings.forEach(([id,path,keys,message]) => { const form=$('#'+id); let requestId=null; form.addEventListener('submit', event => { event.preventDefault(); submit(form, async () => { const data=numeric(fields(form),keys); if(path==='decisions') { requestId ||= crypto.randomUUID(); data.request_id=requestId; } await api(path,data); requestId=null; form.reset(); await refresh(); notice(message); }); }); form.addEventListener('input',()=>{requestId=null;}); });
 
@@ -70,7 +113,7 @@ async function captureVisit(kind) {
 }
 document.addEventListener('visibilitychange', () => { if(document.visibilityState==='hidden') void captureVisit('close'); else if(signedIn) void captureVisit('open').then(refresh).catch(err=>notice(err.message,true)); });
 window.addEventListener('pagehide',()=>{void captureVisit('close');});
-refresh().then(async()=>{await captureVisit('open'); await refresh();}).catch(err=>{showAuth(); if(!err.message.includes('Sign in')) notice(err.message,true);});
+refresh().then(async()=>{await captureVisit('open'); await refresh();}).catch(err=>{showAuth(); if(!err.message.includes('Sign in')) notice(err.message,true);}).finally(()=>{void verifyEmailFromLink();});
 
 async function refreshLab() {
   const data = await api('lab');

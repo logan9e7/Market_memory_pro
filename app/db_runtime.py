@@ -46,5 +46,13 @@ def create_database(root, db_path=None):
         else:
             con.execute("PRAGMA journal_mode=WAL")
             con.executescript(SCHEMA)
+            # Upgrade existing local SQLite development databases in place.
+            # CREATE TABLE IF NOT EXISTS does not add columns to legacy users.
+            user_columns = {row["name"] for row in con.execute("PRAGMA table_info(users)")}
+            if "email" not in user_columns:
+                con.execute("ALTER TABLE users ADD COLUMN email TEXT")
+            if "email_verified" not in user_columns:
+                con.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1")
+            con.execute("CREATE UNIQUE INDEX IF NOT EXISTS mm_users_email_unique ON users(email)")
 
     return db
