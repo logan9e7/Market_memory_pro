@@ -62,9 +62,9 @@ class PasswordChange(BaseModel):
 
 
 class Quote(BaseModel):
-    symbol: str = Field(min_length=1, max_length=32, pattern=r"^[a-zA-Z0-9.^_-]+$")
+    symbol: str = Field(min_length=1, max_length=32, pattern=r"^[a-zA-Z0-9.^_|-]+$")
     price: float = Field(gt=0, allow_inf_nan=False)
-    currency: str = Field(default="INR", pattern=r"^[A-Z]{3}$")
+    currency: str = Field(default="INR", pattern=r"^(?:[A-Z]{3}|USDT|USDC)$")
 
     @field_validator("symbol")
     @classmethod
@@ -115,7 +115,7 @@ class Alert(BaseModel):
     symbol: str = Field(min_length=1, max_length=32)
     condition: Literal["above", "below"]
     target: float = Field(gt=0, allow_inf_nan=False)
-    currency: str = Field(default="INR", pattern=r"^[A-Z]{3}$")
+    currency: str = Field(default="INR", pattern=r"^(?:[A-Z]{3}|USDT|USDC)$")
 
 
 

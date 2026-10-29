@@ -29,3 +29,7 @@ footer{border-top:1px solid var(--border);margin-top:48px;padding:25px 0 12px;di
 [data-discovery-panel][hidden]{display:none!important}
 .discovery-card .meta{font-size:.75rem}.discovery-card{padding:16px}
 @media(max-width:700px){[data-discovery-panel="capture"]{grid-template-columns:1fr}.discovery-tabs button{padding:9px 12px}}
+
+.instrument-choice{text-align:left;display:flex;flex-direction:column;gap:5px;width:100%;white-space:normal}.instrument-choice span{font-size:.8rem;opacity:.8}#discovery-contract-controls[hidden]{display:none!important}
+
+.capture-live{display:flex;flex-direction:column;gap:8px;margin:16px 0;padding:16px;border:1px solid #55794b;border-radius:12px;background:#13251e}.capture-live>strong{font-size:1.7rem;font-variant-numeric:tabular-nums}.capture-live small{line-height:1.5}.capture-live .actions{flex-wrap:wrap}

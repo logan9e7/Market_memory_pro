@@ -39,9 +39,9 @@ def make_markets_router(user):
         import httpx
         token=os.getenv("UPSTOX_ACCESS_TOKEN")
         if not token: raise HTTPException(503,"Upstox credentials not configured")
-        if not re.fullmatch(r"[A-Z_]+\\|[A-Za-z0-9 ._-]{1,90}",instrument_key):
+        if not re.fullmatch(r"[A-Z_]+\|[A-Za-z0-9 ._-]{1,90}",instrument_key):
             raise HTTPException(422,"Invalid instrument key")
-        if not (1<=interval<=300) or not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",to_date) or not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",from_date):
+        if not (1<=interval<=300) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}",to_date) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}",from_date):
             raise HTTPException(422,"Invalid interval or date")
         from urllib.parse import quote
         url=f"https://api.upstox.com/v3/historical-candle/{quote(instrument_key,safe='')}/{unit}/{interval}/{to_date}/{from_date}"
@@ -60,7 +60,7 @@ def make_markets_router(user):
         import httpx
         token=os.getenv("UPSTOX_ACCESS_TOKEN")
         if not token: raise HTTPException(503,"Upstox credentials not configured")
-        if not re.fullmatch(r"[A-Z_]+\\|[A-Za-z0-9 ._-]{1,90}",instrument_key) or not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}",expiry_date):
+        if not re.fullmatch(r"[A-Z_]+\|[A-Za-z0-9 ._-]{1,90}",instrument_key) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}",expiry_date):
             raise HTTPException(422,"Invalid option-chain query")
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:

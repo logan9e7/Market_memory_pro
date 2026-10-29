@@ -4,6 +4,8 @@ Run with a Python environment containing playwright. Uses the project's venv
 to run a separate server and disposable database; never seeds normal user data.
 """
 import os
+import json
+from datetime import datetime, timezone
 import sys
 import subprocess
 import tempfile
@@ -48,6 +50,15 @@ def run():
                     page.get_by_role("button",name="Discovery",exact=True).click()
                     expect(page.locator('[data-view="discovery"]')).to_be_visible()
                     page.locator('[data-discovery-tab="capture"]').click()
+                    # A synthetic quote validates UI behavior without depending on an exchange.
+                    page.route("**/api/discovery/prices?*", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps({"provider":"Test exchange", "quotes":[{"symbol":"BTCUSDT","price":123.45,"currency":"USDT","provider":"Test exchange","as_of":datetime.now(timezone.utc).isoformat(),"change_percent":1,"high":125,"low":120,"volume":10}],"errors":[]})))
+                    page.locator('#quote-form [name="symbol"]').fill("BTCUSDT")
+                    expect(page.locator('#capture-live-price')).to_contain_text("123.45")
+                    page.locator('#capture-use-price').click()
+                    expect(page.locator('#quote-form [name="price"]')).to_have_value("123.45")
+                    expect(page.locator('#quote-form [name="currency"]')).to_have_value("USDT")
+                    page.unroute("**/api/discovery/prices?*")
+                    page.locator('#quote-form [name="currency"]').select_option("INR")
                     page.locator('#quote-form [name="symbol"]').fill("TCS.NS")
                     page.locator('#quote-form [name="price"]').fill("110")
                     page.get_by_role("button",name="Save price & check rules").click()
