@@ -66,7 +66,8 @@ if [ "$source_counts" != "$restored_counts" ]; then
   echo "Isolated restore validation failed: source and restored row/schema counts differ" >&2
   exit 1
 fi
-if [ "$(docker exec "$container_name" psql -U postgres -d mm_restore_test -Atqc "SELECT count(*) FROM mm_schema_migrations")" != 4 ]; then
+migration_files=(migrations/[0-9][0-9][0-9]_*.sql)
+if [ "$(docker exec "$container_name" psql -U postgres -d mm_restore_test -Atqc "SELECT count(*) FROM mm_schema_migrations")" != "${#migration_files[@]}" ]; then
   echo "Isolated restore validation failed: migration ledger missing" >&2
   exit 1
 fi
