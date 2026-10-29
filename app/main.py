@@ -22,6 +22,7 @@ from app.readiness import verify_database_readiness
 from app.strategy_engine import make_strategy_engine
 from app.observability import install_observability
 from app.quant_hybrid import engine_name as quant_engine_name
+from app.email_delivery import delivery_ready, verification_required
 
 ROOT = Path(__file__).resolve().parent.parent
 

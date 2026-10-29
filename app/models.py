@@ -1,4 +1,5 @@
 """Validated HTTP request contracts shared by API routers."""
+import re
 from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
@@ -8,6 +9,20 @@ class Credentials(BaseModel):
 
 
 class RegistrationCredentials(Credentials):
+    email: str | None = Field(default=None, max_length=254)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value):
+        if value is None:
+            return value
+        value = value.strip().lower()
+        # Deliberately conservative ASCII email syntax for reliable delivery.
+        # Reject controls, whitespace, ambiguous Unicode and header injection.
+        if not re.fullmatch(r"[a-z0-9][a-z0-9._%+\-]{0,63}@[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?)+", value):
+            raise ValueError("Enter a valid email address")
+        return value
+
     password: str = Field(min_length=12, max_length=256)
 
     @field_validator("password")
@@ -17,6 +32,20 @@ class RegistrationCredentials(Credentials):
                     any(c.isdigit() for c in value), any(not c.isalnum() for c in value))):
             raise ValueError("Use uppercase, lowercase, number and symbol")
         return value
+
+
+class EmailVerificationToken(BaseModel):
+    token: str = Field(min_length=32, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+class ResendVerification(BaseModel):
+    username: str = Field(min_length=3, max_length=80, pattern=r"^[a-zA-Z0-9_.@-]+$")
+    email: str = Field(min_length=3, max_length=254)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value):
+        return RegistrationCredentials.normalize_email(value)
 
 
 class PasswordChange(BaseModel):

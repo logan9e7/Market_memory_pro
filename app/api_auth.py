@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from app.database import IntegrityErrors
 from app.locking import lock_scopes
-from app.models import Credentials, RegistrationCredentials, PasswordChange
+from app.models import Credentials, RegistrationCredentials, PasswordChange, EmailVerificationToken, ResendVerification
+from app.email_delivery import delivery_ready, verification_required, send_verification_email
 from app.config import (
     SESSION_DAYS, SESSION_MAX_AGE_SECONDS, PASSWORD_HASH_ITERATIONS,
     AUTH_WINDOW_MINUTES, AUTH_IP_ATTEMPTS, AUTH_USER_ATTEMPTS,
@@ -40,16 +41,88 @@ def make_auth_router(db, user, audit, now):
         if blocked:
             raise HTTPException(429, "Too many authentication attempts; retry in five minutes")
 
+    def new_email_token(con, uid):
+        token = secrets.token_urlsafe(32)
+        stamp = datetime.now(timezone.utc)
+        con.execute("DELETE FROM email_verifications WHERE user_id=?", (uid,))
+        con.execute(
+            "INSERT INTO email_verifications(token_hash,user_id,created_at,expires_at) VALUES(?,?,?,?)",
+            (hashlib.sha256(token.encode()).hexdigest(), uid, stamp.isoformat(),
+             (stamp + timedelta(minutes=30)).isoformat()),
+        )
+        return token
+
     @router.post("/api/register", status_code=201)
     def register(payload: RegistrationCredentials, response: Response, request: Request):
         auth_budget(request, payload.username)
+        required = verification_required()
+        if required and not payload.email:
+            raise HTTPException(422, "Email address is required")
+        if required and not delivery_ready():
+            raise HTTPException(503, "Account creation is temporarily unavailable; email delivery is not configured")
         with db() as con:
             try:
-                uid = con.execute("INSERT INTO users(username,password_hash) VALUES(?,?)", (payload.username.lower(), password_hash(payload.password))).lastrowid
+                uid = con.execute(
+                    "INSERT INTO users(username,password_hash,email,email_verified) VALUES(?,?,?,?)",
+                    (payload.username.lower(), password_hash(payload.password), payload.email, not required),
+                ).lastrowid
             except IntegrityErrors:
-                raise HTTPException(409, "Username unavailable")
-            issue_session(con, uid, response, request)
-        return {"username": payload.username.lower()}
+                raise HTTPException(409, "Account details unavailable")
+            if required:
+                token = new_email_token(con, uid)
+                try:
+                    send_verification_email(payload.email, token)
+                except Exception as exc:
+                    # Do not create unusable accounts when the SMTP provider fails.
+                    raise HTTPException(503, "Verification email could not be sent; try again later") from exc
+            else:
+                issue_session(con, uid, response, request)
+        return {"username": payload.username.lower(), "verification_required": required,
+                "message": "Check your email for a verification link" if required else "Account created"}
+
+    @router.post("/api/auth/verify-email")
+    def verify_email(payload: EmailVerificationToken, request: Request):
+        auth_budget(request, "verify-email:" + (request.client.host if request.client else "unknown"))
+        digest = hashlib.sha256(payload.token.encode()).hexdigest()
+        with db() as con:
+            lock_scopes(con, f"email-token:{digest}")
+            row = con.execute(
+                "SELECT user_id FROM email_verifications WHERE token_hash=? AND expires_at>?",
+                (digest, now()),
+            ).fetchone()
+            if not row:
+                raise HTTPException(400, "Verification link is invalid or expired")
+            con.execute("UPDATE users SET email_verified=TRUE WHERE id=?", (row["user_id"],))
+            con.execute("DELETE FROM email_verifications WHERE user_id=?", (row["user_id"],))
+            audit(con, row["user_id"], "email_verified", None, {})
+        return {"status": "verified", "message": "Email verified. You can now sign in."}
+
+    @router.post("/api/auth/resend-verification", status_code=202)
+    def resend_verification(payload: ResendVerification, request: Request):
+        auth_budget(request, payload.username)
+        # The same response for unknown, verified and pending accounts.
+        generic = {"status": "accepted", "message": "If verification is pending, check your inbox"}
+        if not verification_required() or not delivery_ready():
+            return generic
+        with db() as con:
+            lock_scopes(con, f"email-resend:{payload.username.lower()}")
+            row = con.execute(
+                "SELECT id FROM users WHERE username=? AND email=? AND email_verified=FALSE",
+                (payload.username.lower(), payload.email),
+            ).fetchone()
+            if not row:
+                return generic
+            last = con.execute(
+                "SELECT created_at FROM email_verifications WHERE user_id=?", (row["id"],)
+            ).fetchone()
+            if last and (datetime.now(timezone.utc) - datetime.fromisoformat(last["created_at"])).total_seconds() < 60:
+                return generic
+            token = new_email_token(con, row["id"])
+            try:
+                send_verification_email(payload.email, token)
+            except Exception as exc:
+                raise HTTPException(503, "Verification email could not be sent; try again later") from exc
+        return generic
 
     class LoginCredentials(Credentials):
         shared_device: bool = False
@@ -64,6 +137,8 @@ def make_auth_router(db, user, audit, now):
             candidate = password_hash(payload.password, stored.split(":")[0])
             if not row or not hmac.compare_digest(candidate, stored):
                 raise HTTPException(401, "Invalid username or password")
+            if not row["email_verified"]:
+                raise HTTPException(403, "Verify your email address before signing in")
             issue_session(con, row["id"], response, request, payload.shared_device)
         return {"username": row["username"]}
 
