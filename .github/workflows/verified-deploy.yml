@@ -1,0 +1,40 @@
+name: Verified main deploy hook
+on:
+  workflow_run:
+    workflows: ["Application checks"]
+    types: [completed]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success' && vars.MARKET_MEMORY_DEPLOY_HOOK_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPOSITORY: ${{ github.repository }}
+      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.MARKET_MEMORY_RENDER_DEPLOY_HOOK_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Wait for matching native C++ CI and latest main SHA
+        id: gate
+        run: |
+          ready="$(python scripts/check-release-gate.py)"
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+      - name: Trigger Render only after both checks pass
+        if: ${{ steps.gate.outputs.ready == 'true' }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "MARKET_MEMORY_RENDER_DEPLOY_HOOK_URL secret missing" >&2
+            exit 1
+          fi
+          case "$RENDER_DEPLOY_HOOK_URL" in
+            https://api.render.com/deploy/*) ;;
+            *) echo "Refusing non-Render deploy hook" >&2; exit 1 ;;
+          esac
+          curl --fail --silent --show-error --max-time 30 -X POST             "$RENDER_DEPLOY_HOOK_URL" >/dev/null
+          echo "Render deploy hook accepted for verified main revision."

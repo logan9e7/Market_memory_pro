@@ -99,9 +99,15 @@ https://dashboard.render.com/web/srv-db9thc7avr4c73fc1qr0
   the default Uvicorn command is safe because production startup is
   check-only and refuses pending migrations.
 - Auto-deploy: actual service reports autoDeploy=yes, but prior merges
-  required explicit deploys. Verify GitHub installation/branch and test
-  that a successful merge triggers a new deploy. The production monitor
-  checks that the **actual deployed SHA matches the merged main SHA**.
+  required explicit deploys. To enable the optional GitHub Actions deploy
+  hook, set repository **variable**
+  `MARKET_MEMORY_DEPLOY_HOOK_ENABLED=true` and repository **secret**
+  `MARKET_MEMORY_RENDER_DEPLOY_HOOK_URL` (the Render service's Deploy Hook
+  URL from its dashboard). The workflow `.github/workflows/verified-deploy.yml`
+  waits for both application and native C++ CI to pass for the latest main
+  SHA, then triggers the Render hook. Never commit the hook URL. This is
+  **not active** until configured. Verify a merge deploys automatically.
+  The production monitor checks that the actual deployed SHA matches main.
 - Free Render instances can sleep, delaying the first request. Choose a
   paid always-on tier if uptime/SLA is required. Do not advertise 24/7
   reliability based on scheduled smoke checks alone.
