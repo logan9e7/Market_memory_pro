@@ -97,6 +97,9 @@ def make_auth_router(db, user, audit, now):
             audit(con, row["user_id"], "email_verified", None, {})
         return {"status": "verified", "message": "Email verified. You can now sign in."}
 
+    class ResendDeliveryFailure(Exception):
+        pass
+
     @router.post("/api/auth/resend-verification", status_code=202)
     def resend_verification(payload: ResendVerification, request: Request):
         auth_budget(request, payload.username)
@@ -104,24 +107,29 @@ def make_auth_router(db, user, audit, now):
         generic = {"status": "accepted", "message": "If verification is pending, check your inbox"}
         if not verification_required() or not delivery_ready():
             return generic
-        with db() as con:
-            lock_scopes(con, f"email-resend:{payload.username.lower()}")
-            row = con.execute(
-                "SELECT id FROM users WHERE username=? AND email=? AND email_verified=FALSE",
-                (payload.username.lower(), payload.email),
-            ).fetchone()
-            if not row:
-                return generic
-            last = con.execute(
-                "SELECT created_at FROM email_verifications WHERE user_id=?", (row["id"],)
-            ).fetchone()
-            if last and (datetime.now(timezone.utc) - datetime.fromisoformat(last["created_at"])).total_seconds() < 60:
-                return generic
-            token = new_email_token(con, row["id"])
-            try:
-                send_verification_email(payload.email, token)
-            except Exception as exc:
-                raise HTTPException(503, "Verification email could not be sent; try again later") from exc
+        try:
+            with db() as con:
+                lock_scopes(con, f"email-resend:{payload.username.lower()}")
+                row = con.execute(
+                    "SELECT id FROM users WHERE username=? AND email=? AND email_verified=FALSE",
+                    (payload.username.lower(), payload.email),
+                ).fetchone()
+                if not row:
+                    return generic
+                last = con.execute(
+                    "SELECT created_at FROM email_verifications WHERE user_id=?", (row["id"],)
+                ).fetchone()
+                if last and (datetime.now(timezone.utc) - datetime.fromisoformat(last["created_at"])).total_seconds() < 60:
+                    return generic
+                token = new_email_token(con, row["id"])
+                try:
+                    send_verification_email(payload.email, token)
+                except Exception as exc:
+                    # Roll back the token rotation but avoid account enumeration
+                    # through SMTP provider errors.
+                    raise ResendDeliveryFailure() from exc
+        except ResendDeliveryFailure:
+            return generic
         return generic
 
     class LoginCredentials(Credentials):

@@ -88,6 +88,22 @@ class EmailVerificationTests(unittest.TestCase):
         self.assertEqual(self.client.post("/api/auth/verify-email", json={"token": self.tokens[0][1]}).status_code, 400)
         self.assertEqual(self.client.post("/api/auth/verify-email", json={"token": self.tokens[1][1]}).status_code, 200)
 
+    def test_resend_smtp_outage_does_not_reveal_account_or_rotate_token(self):
+        self.register()
+        original = self.tokens[0][1]
+        with sqlite3.connect(self.path) as con:
+            con.execute("UPDATE email_verifications SET created_at=?",
+                        ((datetime.now(timezone.utc)-timedelta(minutes=2)).isoformat(),))
+        payload = {"username": "newresearcher", "email": "researcher@example.com"}
+        with patch("app.api_auth.send_verification_email", side_effect=OSError("SMTP down")):
+            pending = self.client.post("/api/auth/resend-verification", json=payload)
+            unknown = self.client.post("/api/auth/resend-verification", json={
+                "username": "missing", "email": "missing@example.com"
+            })
+        self.assertEqual(pending.status_code, 202)
+        self.assertEqual(pending.json(), unknown.json())
+        self.assertEqual(self.client.post("/api/auth/verify-email", json={"token": original}).status_code, 200)
+
     def test_resend_does_not_enumerate_accounts(self):
         self.register()
         a = self.client.post("/api/auth/resend-verification", json={
