@@ -28,5 +28,22 @@ class ProductionProbeTests(unittest.TestCase):
         with patch.object(probe, "request", side_effect=lambda path: responses[path]):
             probe.verify()
 
+    def test_revision_wait_retries_only_stale_deploy(self):
+        with patch.object(probe, "EXPECTED_REVISION", "abc123"):
+            with patch.dict("os.environ", {"WAIT_FOR_REVISION_SECONDS": "60"}):
+                with patch.object(probe, "verify", side_effect=[
+                    AssertionError("Unexpected deployed commit"), None]) as verify:
+                    with patch.object(probe.time, "sleep") as sleep:
+                        probe.verify_with_revision_wait()
+                    self.assertEqual(verify.call_count, 2)
+                    sleep.assert_called_once()
+
+    def test_revision_wait_does_not_mask_other_failures(self):
+        with patch.object(probe, "EXPECTED_REVISION", "abc123"):
+            with patch.dict("os.environ", {"WAIT_FOR_REVISION_SECONDS": "60"}):
+                with patch.object(probe, "verify", side_effect=AssertionError("Private API exposed")):
+                    with self.assertRaisesRegex(AssertionError, "Private API exposed"):
+                        probe.verify_with_revision_wait()
+
 if __name__ == "__main__":
     unittest.main()

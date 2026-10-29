@@ -65,9 +65,25 @@ def verify():
                       "quant_engine":ready["quant_engine"],"database":"reachable",
                       "execution_mode":"paper","private_api":"401","assets":"ok"}))
 
+def verify_with_revision_wait():
+    """Wait only for the expected commit; never hide other production failures."""
+    wait_seconds = int(os.getenv("WAIT_FOR_REVISION_SECONDS", "0"))
+    if wait_seconds < 0 or wait_seconds > 900:
+        raise ValueError("WAIT_FOR_REVISION_SECONDS must be between 0 and 900")
+    deadline = time.monotonic() + wait_seconds
+    while True:
+        try:
+            return verify()
+        except AssertionError as exc:
+            if ("Unexpected deployed commit" not in str(exc)
+                    or not EXPECTED_REVISION or time.monotonic() >= deadline):
+                raise
+            time.sleep(min(20, max(0, deadline - time.monotonic())))
+
+
 if __name__ == "__main__":
     try:
-        verify()
+        verify_with_revision_wait()
     except Exception as exc:
         print(f"Production verification failed: {type(exc).__name__}: {exc}", file=sys.stderr)
         sys.exit(1)

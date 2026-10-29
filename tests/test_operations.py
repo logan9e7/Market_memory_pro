@@ -1,5 +1,6 @@
 """Operational middleware and trust-store configuration regression tests."""
 import json
+import os
 import logging
 import tempfile
 import unittest
@@ -63,8 +64,8 @@ class OperationsTests(unittest.TestCase):
         with patch.dict("os.environ", {
             "MARKET_MEMORY_PRODUCTION": "1",
             "DATABASE_URL": "postgresql://db.example.invalid/market",
-            "MARKET_MEMORY_MIGRATIONS_AT_STARTUP": "",
         }):
+            os.environ.pop("MARKET_MEMORY_MIGRATIONS_AT_STARTUP", None)
             with patch("app.db_runtime.PostgresConnection"), patch("app.db_runtime.apply_migrations") as migrations:
                 create_database(Path("/tmp"))
                 self.assertTrue(migrations.call_args.kwargs["check_only"])
