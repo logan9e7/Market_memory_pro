@@ -123,31 +123,49 @@ class EmailVerificationTests(unittest.TestCase):
             self.assertEqual(con.execute("SELECT COUNT(*) FROM users").fetchone()[0], 0)
             self.assertEqual(con.execute("SELECT COUNT(*) FROM email_verifications").fetchone()[0], 0)
 
-    def test_smtp_email_uses_fragment_and_verified_tls(self):
+    def test_https_email_uses_fragment_and_verified_tls(self):
+        import json
         from unittest.mock import MagicMock
         from app.email_delivery import send_verification_email
-        client = MagicMock()
-        client.__enter__.return_value = client
-        client.__exit__.return_value = False
+        response = MagicMock()
+        response.status = 200
+        response.read.return_value = b'{"id":"test-message-id"}'
+        response.__enter__.return_value = response
+        response.__exit__.return_value = False
         with patch.dict(os.environ, {
             "MARKET_MEMORY_ORIGIN": "https://market-memory-pro.onrender.com",
-            "MARKET_MEMORY_SMTP_HOST": "smtp.example.com",
-            "MARKET_MEMORY_SMTP_PORT": "465",
-            "MARKET_MEMORY_SMTP_USER": "api-user",
-            "MARKET_MEMORY_SMTP_PASSWORD": "test-only-password",
-            "MARKET_MEMORY_SMTP_FROM": "verify@example.com",
-        }), patch("app.email_delivery.smtplib.SMTP_SSL", return_value=client) as smtp:
+            "MARKET_MEMORY_RESEND_API_KEY": "re_test-only-not-real",
+            "MARKET_MEMORY_EMAIL_FROM": "verify@example.com",
+        }), patch("app.email_delivery.urlopen", return_value=response) as sender:
             send_verification_email("researcher@example.com", "test-safe-token")
-        self.assertEqual(smtp.call_args.args[:2], ("smtp.example.com", 465))
-        self.assertIsNotNone(smtp.call_args.kwargs.get("context"))
-        self.assertEqual(client.login.call_count, 1)
-        message = client.send_message.call_args.args[0]
-        body = message.get_content()
-        self.assertIn("/#verify-email=test-safe-token", body)
-        self.assertNotIn("/?token=", body)
-        self.assertEqual(message["To"], "researcher@example.com")
+        request = sender.call_args.args[0]
+        self.assertEqual(request.full_url, "https://api.resend.com/emails")
+        self.assertEqual(request.get_method(), "POST")
+        self.assertIsNotNone(sender.call_args.kwargs.get("context"))
+        self.assertEqual(sender.call_args.kwargs["timeout"], 10)
+        payload = json.loads(request.data)
+        self.assertIn("/#verify-email=test-safe-token", payload["text"])
+        self.assertNotIn("/?token=", payload["text"])
+        self.assertEqual(payload["to"], ["researcher@example.com"])
+        self.assertTrue(request.get_header("Idempotency-key").startswith("verify-"))
 
-    def test_missing_smtp_blocks_registration(self):
+    def test_https_email_requires_provider_acceptance_receipt(self):
+        from unittest.mock import MagicMock
+        from app.email_delivery import send_verification_email
+        response = MagicMock()
+        response.status = 200
+        response.read.return_value = b'{}'
+        response.__enter__.return_value = response
+        response.__exit__.return_value = False
+        with patch.dict(os.environ, {
+            "MARKET_MEMORY_ORIGIN": "https://market-memory-pro.onrender.com",
+            "MARKET_MEMORY_RESEND_API_KEY": "re_test-only-not-real",
+            "MARKET_MEMORY_EMAIL_FROM": "verify@example.com",
+        }), patch("app.email_delivery.urlopen", return_value=response):
+            with self.assertRaisesRegex(RuntimeError, "did not confirm acceptance"):
+                send_verification_email("researcher@example.com", "test-safe-token")
+
+    def test_missing_email_api_blocks_registration(self):
         with patch("app.api_auth.delivery_ready", return_value=False):
             response = self.register()
         self.assertEqual(response.status_code, 503)

@@ -17,17 +17,11 @@ services:
         sync: false
       - key: MARKET_MEMORY_ORIGIN
         sync: false
-      # Required for registration: SMTP credentials are configured as Render
-      # secrets. Production registration fails closed until all are present.
-      - key: MARKET_MEMORY_SMTP_HOST
+      # Free Render blocks outbound SMTP. Use HTTPS transactional email API.
+      # Production signup fails closed until the provider key/sender are set.
+      - key: MARKET_MEMORY_RESEND_API_KEY
         sync: false
-      - key: MARKET_MEMORY_SMTP_PORT
-        value: '465'
-      - key: MARKET_MEMORY_SMTP_USER
-        sync: false
-      - key: MARKET_MEMORY_SMTP_PASSWORD
-        sync: false
-      - key: MARKET_MEMORY_SMTP_FROM
+      - key: MARKET_MEMORY_EMAIL_FROM
         sync: false
       - key: MARKET_MEMORY_SECURE_COOKIE
         value: '1'

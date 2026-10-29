@@ -189,20 +189,27 @@ digests and appear in the email URL fragment (not HTTP query strings).
 Resend has a 60-second cooldown and uses the existing authentication budget.
 Existing accounts are grandfathered to preserve their data and access.
 
-Set the following **Render environment secrets** (never commit credentials):
-- `MARKET_MEMORY_SMTP_HOST` (provider's authenticated SMTP host)
-- `MARKET_MEMORY_SMTP_PORT` (`465` for implicit TLS or `587` for STARTTLS)
-- `MARKET_MEMORY_SMTP_USER` and `MARKET_MEMORY_SMTP_PASSWORD`
-- `MARKET_MEMORY_SMTP_FROM` (verified sender address)
+**Render Free blocks outbound SMTP ports 25, 465 and 587.** Therefore
+registration emails are sent through Resend's HTTPS REST API, not SMTP.
+Resend has a free email allowance (currently 3,000/month and 100/day).
+Configure the following **Render environment secrets** (never commit keys):
+
+- `MARKET_MEMORY_RESEND_API_KEY`: send-only API key from Resend.
+- `MARKET_MEMORY_EMAIL_FROM`: sender address on a verified Resend domain.
 - `MARKET_MEMORY_ORIGIN=https://market-memory-pro.onrender.com`
 
-The SMTP connection uses certificate-verified TLS and SMTP authentication.
+Verify your sending domain and DNS records with Resend before going live.
+The backend verifies HTTPS certificates, sends requests to a fixed Resend API
+endpoint, and checks the provider's returned email ID. The idempotency key
+is derived from the verification token hash to avoid duplicate sends.
+
 If these settings are missing, **new production registration returns 503**;
 existing users can still sign in. Do not disable verification in production.
-The email provider must authorize the sender and permit transactional messages.
+Do not paste the Resend API key into chat; set it directly in Render secrets.
 
 **Deployment order:** apply additive PostgreSQL migration
-`004_email_verification.sql` using `python -m app.migrations apply` in an
-authorized, controlled step **before** deploying code that requires the new
-columns. Production web startup is check-only and will reject an unapplied
-migration. Then deploy, configure SMTP secrets, and test a real inbox.
+`004_email_verification.sql` in an authorized, controlled migration step
+**before** the new web process starts, or enable the controlled migration
+runner for the release and return to check-only mode immediately afterward.
+Production web startup normally checks migrations without modifying schema.
+Then deploy, configure HTTPS email API secrets, and test a real inbox.
