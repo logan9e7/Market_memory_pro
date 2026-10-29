@@ -46,12 +46,15 @@ def verify():
     live = json.loads(live_body)
     ready = json.loads(ready_body)
     assert live["status"] == "alive" and ready["status"] == "ready", "Invalid health payload"
+    assert ready["revision"] and ready["revision"] != "unknown", "Deployment revision unavailable"
+    # During a rolling deploy, old revisions can legitimately lack newly
+    # introduced fields. Check revision FIRST so the bounded rollout retry
+    # waits for the correct build instead of reporting a false schema failure.
+    if EXPECTED_REVISION:
+        assert ready["revision"].startswith(EXPECTED_REVISION[:12]), "Unexpected deployed commit"
     assert ready["database"] == "reachable" and ready["execution_mode"] == "paper", "Wrong database/execution mode"
     assert ready.get("schema") == "current", "Database migration ledger is not verified"
     assert live["quant_engine"] == ready["quant_engine"] == EXPECTED_NATIVE, "Native engine mismatch"
-    assert ready["revision"] and ready["revision"] != "unknown", "Deployment revision unavailable"
-    if EXPECTED_REVISION:
-        assert ready["revision"].startswith(EXPECTED_REVISION[:12]), "Unexpected deployed commit"
     index_status, headers, html = request("/")
     assert index_status == 200 and b"MARKET MEMORY" in html, "Landing page not served"
     assert headers.get("x-frame-options", "").upper() == "DENY", "Frame protection missing"

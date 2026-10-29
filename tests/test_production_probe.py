@@ -28,6 +28,19 @@ class ProductionProbeTests(unittest.TestCase):
         with patch.object(probe, "request", side_effect=lambda path: responses[path]):
             probe.verify()
 
+    def test_rolling_upgrade_retries_old_revision_without_schema_field(self):
+        old = {
+            "/health/live": (200, {}, json.dumps({"status":"alive","revision":"oldrevision",
+                "quant_engine":"cpp-pybind11"}).encode()),
+            "/health/ready": (200, {}, json.dumps({"status":"ready","revision":"oldrevision",
+                "database":"reachable","execution_mode":"paper",
+                "quant_engine":"cpp-pybind11"}).encode()),
+        }
+        with patch.object(probe, "EXPECTED_REVISION", "newrevision"):
+            with patch.object(probe, "request", side_effect=lambda path: old[path]):
+                with self.assertRaisesRegex(AssertionError, "Unexpected deployed commit"):
+                    probe.verify()
+
     def test_revision_wait_retries_only_stale_deploy(self):
         with patch.object(probe, "EXPECTED_REVISION", "abc123"):
             with patch.dict("os.environ", {"WAIT_FOR_REVISION_SECONDS": "60"}):
