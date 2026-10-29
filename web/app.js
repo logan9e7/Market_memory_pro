@@ -67,8 +67,8 @@ $('#auth-form').addEventListener('submit', event => {
     const result = await api(path,payload);
     if (path === 'register' && result.verification_required) {
       event.target.reset();
-      $('#auth-feedback').textContent = 'Check your inbox and open the verification link. Then sign in.';
       notice('Verification email sent. Check your inbox and spam folder.');
+      $('#auth-feedback').textContent = 'Check your inbox and open the verification link. Then sign in.';
       return;
     }
     event.target.reset();
@@ -93,12 +93,12 @@ async function verifyEmailFromLink() {
   try {
     const result = await api('auth/verify-email', {token: match[1]});
     openAuthDialog();
-    $('#auth-feedback').textContent = result.message;
     notice(result.message);
+    $('#auth-feedback').textContent = result.message;
   } catch (error) {
     openAuthDialog();
-    $('#auth-feedback').textContent = error.message;
     notice(error.message, true);
+    $('#auth-feedback').textContent = error.message;
   }
 }
 const bindings = [['quote-form','quotes',['price'],'Price recorded. Alerts and eligible strategies checked.'],['snapshot-form','snapshots',[],'Snapshot preserved.'],['decision-form','decisions',['price','trigger_price'],'Decision saved. Review it when the outcome is known.'],['alert-form','alerts',['target'],'Alert saved.']];
