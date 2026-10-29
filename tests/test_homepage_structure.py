@@ -33,11 +33,11 @@ class HomepageContract(unittest.TestCase):
                      "decision-form","alert-form","password-form","quant-option",
                      "quant-trades","market-form","lab-form","analyze-memory","notice"):
             self.assertIn(name, p.ids, name)
-        expected = {"overview","capture","memory","strategies","lab","quant",
+        expected = {"overview","discovery","memory","strategies","lab","quant",
                     "intelligence","opportunities","account"}
         self.assertEqual(p.views, expected)
         self.assertEqual(p.tabs, expected)
-        self.assertEqual(p.go, {"capture","memory","lab"})
+        self.assertEqual(p.go, {"discovery","memory","lab"})
 
     def test_homepage_has_no_invented_feed_or_remote_dependency(self):
         html = (WEB / "index.html").read_text()

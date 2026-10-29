@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#0b1217">
 <meta name="description" content="A private research desk for market observations, decisions and evidence-backed learning.">
 <title>Market Memory Pro — Your Research Desk</title>
-<link rel="stylesheet" href="/static/style.css?v=desk-20261025-1">
-<script defer src="/static/app.js?v=email-verify-20261029"></script>
+<link rel="stylesheet" href="/static/style.css?v=discovery-20261029">
+<script defer src="/static/app.js?v=discovery-20261029"></script>
 </head>
 <body>
 <header class="site-header">
@@ -60,7 +60,7 @@
     <div class="sidebar-nav-label">WORKSPACE</div>
     <nav class="workspace-nav" aria-label="Notebook views">
       <button type="button" data-tab="overview" class="selected">Overview</button>
-      <button type="button" data-tab="capture">Capture</button>
+      <button type="button" data-tab="discovery">Discovery</button>
       <button type="button" data-tab="memory">Memory</button>
       <button type="button" data-tab="strategies">Strategies</button>
       <button type="button" data-tab="lab">Strategy Lab</button>
@@ -80,7 +80,7 @@
       <div id="metrics" class="metrics" aria-label="Your recorded activity"></div>
       <div class="overview-section-title"><h2>Where do you want to begin?</h2><p>Three actions, one research process.</p></div>
       <div class="desk-actions">
-        <button type="button" class="desk-action" data-goto="capture"><span>01 <span class="slash">/</span> CAPTURE</span><strong>Record an observation</strong><small>A price, a moment, a reason.</small><i aria-hidden="true">↗</i></button>
+        <button type="button" class="desk-action" data-goto="discovery"><span>01 <span class="slash">/</span> DISCOVERY</span><strong>Explore markets & capture</strong><small>A price, a moment, a reason.</small><i aria-hidden="true">↗</i></button>
         <button type="button" class="desk-action" data-goto="memory"><span>02 <span class="slash">/</span> MEMORY</span><strong>Review your decisions</strong><small>Return to the thesis and outcome.</small><i aria-hidden="true">↗</i></button>
         <button type="button" class="desk-action" data-goto="lab"><span>03 <span class="slash">/</span> RESEARCH</span><strong>Test a hypothesis</strong><small>Explore evidence before acting.</small><i aria-hidden="true">↗</i></button>
       </div>
@@ -89,7 +89,10 @@
         <aside class="principle-panel"><div class="eyebrow">THE PRINCIPLE</div><h3>A pattern is earned.<br>Never assumed.</h3><p>Paper execution only. No live trades.</p></aside>
       </div>
     </section>
-<section data-view="capture"><div class="grid"><article class="panel"><div class="eyebrow">01 / MARKET CONTEXT</div><h2>Record a price</h2><p>Use a price you observed. These records drive your alerts and strategy checks.</p><form id="quote-form"><div class="row"><label>Symbol<input name="symbol" placeholder="RELIANCE.NS" required maxlength="32"></label><label>Currency<select name="currency"><option>INR</option><option>USD</option><option>EUR</option></select></label></div><label>Observed price<input name="price" type="number" min="0.00000001" step="any" required></label><button>Save price & check rules</button></form><div id="quotes" class="stack"></div></article>
+<section data-view="discovery"><div class="section-heading"><div class="eyebrow">DISCOVERY / YOUR MARKET DESK</div><h2>Find it. Watch it. Remember why.</h2><p>Explore crypto spot prices in USDT. Keep a watchlist, then capture your observations below.</p></div>
+<article class="panel"><form id="discovery-search"><label>Search a crypto pair<input name="symbol" placeholder="BTCUSDT, ETHUSDT, SOLUSDT" maxlength="20" required pattern="[A-Za-z0-9]{3,20}"></label><button>Find asset</button></form><div class="actions"><button type="button" id="discovery-refresh" class="secondary">Refresh prices</button><label><input type="checkbox" id="discovery-auto" checked> Refresh every 30 seconds</label></div><p id="discovery-status" role="status">Open Discovery to load prices.</p><div id="discovery-results" class="discovery-cards"></div></article>
+<article class="panel"><div class="eyebrow">YOUR WATCHLIST</div><h2>Keep your next idea close</h2><p>Saved privately to your account. Prices load while this tab is open.</p><div id="discovery-watchlist" class="discovery-cards" aria-live="polite"></div></article>
+<div class="section-heading"><h2>Capture your research</h2><p>Manual prices, snapshots, decisions and alerts stay together here. Live Discovery prices are separate from your recorded evidence.</p></div><div class="grid"><article class="panel"><div class="eyebrow">01 / MARKET CONTEXT</div><h2>Record a price</h2><p>Use a price you observed. These records drive your alerts and strategy checks.</p><form id="quote-form"><div class="row"><label>Symbol<input name="symbol" placeholder="RELIANCE.NS" required maxlength="32"></label><label>Currency<select name="currency"><option>INR</option><option>USD</option><option>EUR</option></select></label></div><label>Observed price<input name="price" type="number" min="0.00000001" step="any" required></label><button>Save price & check rules</button></form><div id="quotes" class="stack"></div></article>
 <article class="panel"><div class="eyebrow">02 / A MOMENT WORTH KEEPING</div><h2>Manual snapshot</h2><p>Freeze the last price you recorded alongside your market observation.</p><form id="snapshot-form"><label>Symbol<input name="symbol" required maxlength="32" placeholder="RELIANCE.NS"></label><label>What did you notice?<textarea name="note" maxlength="5000" placeholder="Volume expanded near the level I was watching…"></textarea></label><button>Keep this moment</button></form></article></div>
 <div class="grid"><article class="panel"><div class="eyebrow">03 / RECORD YOUR REASONING</div><h2>Decision journal</h2><p>Repeat the same setup and rule to build a comparable strategy history. Outcomes are reviewed afterward.</p><form id="decision-form"><div class="row"><label>Symbol<input name="symbol" required maxlength="32"></label><label>Currency<select name="currency"><option>INR</option><option>USD</option><option>EUR</option></select></label></div><label>Setup name<input name="setup" required minlength="2" maxlength="120" placeholder="Breakout above resistance"></label><div class="row"><label>Action<select name="side"><option value="buy">Buy</option><option value="sell">Sell</option></select></label><label>Observed entry price<input name="price" type="number" step="any" min="0.00000001" required></label></div><div class="row"><label>Opportunity rule<select name="condition"><option value="above">At or above</option><option value="below">At or below</option></select></label><label>Trigger price<input name="trigger_price" type="number" step="any" min="0.00000001" required></label></div><label>Reasoning<textarea name="note" required maxlength="5000" placeholder="Why this setup? What would invalidate it?"></textarea></label><button>Record decision</button></form></article>
 <article class="panel"><div class="eyebrow">04 / REMEMBER THE LEVEL</div><h2>Your alerts</h2><p>Alerts check whenever you record a new price. No continuous market feed is connected.</p><form id="alert-form"><div class="row"><label>Symbol<input name="symbol" required maxlength="32"></label><label>Currency<select name="currency"><option>INR</option><option>USD</option><option>EUR</option></select></label></div><div class="row"><label>Condition<select name="condition"><option value="above">At or above</option><option value="below">At or below</option></select></label><label>Target<input name="target" type="number" min="0.00000001" step="any" required></label></div><button>Set alert</button></form><div id="alerts" class="stack"></div></article></div></section>
@@ -116,5 +119,6 @@
   </div>
 </div>
 </main>
+<script src="/static/discovery.js" defer></script>
 </body>
 </html>

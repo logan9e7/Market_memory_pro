@@ -24,3 +24,7 @@ CREATE INDEX IF NOT EXISTS analysis_reports_owner ON analysis_reports(user_id,id
 CREATE TABLE IF NOT EXISTS lab_ideas(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),title TEXT NOT NULL,hypothesis TEXT NOT NULL,symbol TEXT NOT NULL,timeframe TEXT NOT NULL,visibility TEXT NOT NULL DEFAULT 'private',status TEXT NOT NULL DEFAULT 'draft',created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS lab_notes(id INTEGER PRIMARY KEY,idea_id INTEGER NOT NULL REFERENCES lab_ideas(id),user_id INTEGER NOT NULL REFERENCES users(id),role TEXT NOT NULL,content TEXT NOT NULL,created_at TEXT NOT NULL);
 """
+
+SCHEMA += """
+CREATE TABLE IF NOT EXISTS watchlist(user_id INTEGER NOT NULL REFERENCES users(id), symbol TEXT NOT NULL, PRIMARY KEY(user_id,symbol));
+"""

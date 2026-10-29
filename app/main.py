@@ -15,6 +15,7 @@ from app.api_journal import make_journal_router
 from app.api_strategy import make_strategy_router
 from app.api_lab import make_lab_router
 from app.api_quant import make_quant_router
+from app.api_discovery import make_discovery_router
 from app.api_markets import make_markets_router
 from app.api_intelligence import make_intelligence_router
 from app.db_runtime import create_database
@@ -97,6 +98,7 @@ def create_app(db_path=None):
     app.include_router(make_quant_router(user))
 
     app.include_router(make_markets_router(user))
+    app.include_router(make_discovery_router(db, user))
 
     app.include_router(make_intelligence_router(user, db, now))
 
