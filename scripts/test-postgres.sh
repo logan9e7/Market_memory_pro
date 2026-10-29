@@ -86,6 +86,9 @@ if command -v age >/dev/null 2>&1 && command -v age-keygen >/dev/null 2>&1; then
   test -n "$encrypted_file"
   sha256sum -c "$encrypted_file.sha256"
   docker exec "$container_name" createdb -U postgres mm_encrypted_restore_test
+  # PostgreSQL creates public by default; the archive includes CREATE SCHEMA public.
+  # Drop it ONLY in this newly created disposable restore database.
+  docker exec "$container_name" psql -U postgres -d mm_encrypted_restore_test -c "DROP SCHEMA public CASCADE" >/dev/null
   age -d -i "$cert_dir/age-test-identity.txt" "$encrypted_file" | \
     docker exec -i "$container_name" pg_restore -U postgres --no-owner --no-acl \
       -d mm_encrypted_restore_test
