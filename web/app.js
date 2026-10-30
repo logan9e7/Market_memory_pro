@@ -8,8 +8,9 @@ let signedIn = false;
 let visitOpen = false;
 let activeTab = 'overview';
 let state = {};
+let noticeTimer = null;
 
-function notice(message, error = false) { $('#notice').textContent = message; $('#notice').className = error ? 'error' : ''; const feedback = $('#auth-feedback'); if (feedback) feedback.textContent = $('#auth-dialog').open && error ? message : ''; }
+function notice(message, error = false) { clearTimeout(noticeTimer); if(message && !error) noticeTimer=setTimeout(()=>{if($('#notice').textContent===message)$('#notice').textContent='';},6000); $('#notice').textContent = message; $('#notice').className = error ? 'error' : ''; const feedback = $('#auth-feedback'); if (feedback) feedback.textContent = $('#auth-dialog').open && error ? message : ''; }
 async function api(path, body, options = {}) {
   const response = await fetch(`/api/${path}`, {method:body ? 'POST':'GET', headers:{'Content-Type':'application/json'}, credentials:'same-origin', ...(body ? {body:JSON.stringify(body)} : {}), ...options});
   const result = await response.json();
@@ -28,8 +29,10 @@ async function submit(form, work) {
   finally { buttons.forEach(b => b.disabled = false); }
 }
 function list(selector, rows, render, empty) { $(selector).innerHTML = rows.length ? rows.map(render).join('') : `<div class="empty">${e(empty)}</div>`; }
-function setTab(tab) { activeTab = tab; window.dispatchEvent(new CustomEvent('desk-tab', {detail:tab})); document.querySelectorAll('[data-view]').forEach(v => v.hidden = v.dataset.view !== tab); document.querySelectorAll('[data-tab]').forEach(b => { const active = b.dataset.tab === tab; b.classList.toggle('selected', active); b.setAttribute('aria-current', active ? 'page' : 'false'); }); }
+function setTab(tab) { activeTab = tab; $('#workspace-mobile-more').value=['overview','discovery','memory'].includes(tab)?'':tab; window.dispatchEvent(new CustomEvent('desk-tab', {detail:tab})); document.querySelectorAll('[data-view]').forEach(v => v.hidden = v.dataset.view !== tab); document.querySelectorAll('[data-tab]').forEach(b => { const active = b.dataset.tab === tab; b.classList.toggle('selected', active); b.setAttribute('aria-current', active ? 'page' : 'false'); }); }
 document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => setTab(button.dataset.tab)));
+
+$('#workspace-mobile-more').addEventListener('change',event=>{if(event.target.value)setTab(event.target.value);});
 
 async function refresh() {
   state = await api('state'); signedIn = true; $('#auth').hidden = true; $('#workspace').hidden = false; document.body.classList.add('is-signed-in'); if ($('#auth-dialog').open) $('#auth-dialog').close();

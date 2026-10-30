@@ -64,12 +64,16 @@ def run():
                     page.screenshot(path=str(ROOT / "discovery-qa-desktop.png"),full_page=True)
                     page.set_viewport_size({"width":390,"height":844})
                     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"),"Discovery mobile layout overflows"
+                    expect(page.locator('#workspace-mobile-more')).to_be_visible()
+                    page.locator('#workspace-mobile-more').select_option('account')
+                    expect(page.locator('[data-view="account"]')).to_be_visible()
+                    page.get_by_role('button',name='Discovery',exact=True).click()
                     page.screenshot(path=str(ROOT / "discovery-qa-mobile.png"),full_page=True)
                     page.locator('#discovery-results [data-open-asset="BTCUSDT"]').first.click()
                     expect(page.locator('#asset-dialog')).to_be_visible()
                     bounds=page.locator('#asset-dialog').bounding_box()
                     assert abs(bounds['y']+bounds['height']-844)<3,"Asset sheet is not bottom aligned"
-                    page.screenshot(path=str(ROOT / "discovery-qa-sheet.png"),full_page=True)
+                    page.screenshot(path=str(ROOT / "discovery-qa-sheet.png"),full_page=False)
                     page.locator('#asset-close').click()
                     page.set_viewport_size({"width":1280,"height":1000})
                     page.locator('#discovery-results [data-open-asset="BTCUSDT"]').first.click()
