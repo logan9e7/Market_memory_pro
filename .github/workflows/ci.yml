@@ -52,5 +52,6 @@ jobs:
           path: |
             browser-smoke.png
             discovery-qa-*.png
+            app-qa-*.png
           if-no-files-found: ignore
           retention-days: 3
