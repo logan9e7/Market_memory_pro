@@ -72,6 +72,10 @@ class Quote(BaseModel):
         return value.upper()
 
 
+class Capture(Quote):
+    note: str = Field(default="", max_length=5000)
+
+
 class Snapshot(BaseModel):
     symbol: str = Field(min_length=1, max_length=32)
     note: str = Field(default="", max_length=5000)

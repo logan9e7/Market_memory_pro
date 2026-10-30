@@ -1,6 +1,6 @@
 """User-owned, transactional journal and review endpoints."""
 from fastapi import APIRouter, Depends, HTTPException
-from app.models import Quote, Snapshot, Visit, Decision, Review
+from app.models import Quote, Snapshot, Visit, Decision, Review, Capture
 from app.locking import lock_scopes
 
 def make_journal_router(db, user, now, audit, evaluate, latest):
@@ -16,6 +16,16 @@ def make_journal_router(db, user, now, audit, evaluate, latest):
 
     def snapshot_row(con, uid, quote, note, kind, visit_id=None):
         return con.execute("INSERT INTO snapshots(user_id,symbol,price,currency,quote_id,note,kind,visit_id,recorded_at) VALUES(?,?,?,?,?,?,?,?,?)", (uid, quote["symbol"], quote["price"], quote["currency"], quote["id"], note, kind, visit_id, now())).lastrowid
+
+    @router.post("/api/captures", status_code=201)
+    def capture(payload: Capture, uid=Depends(user)):
+        with db() as con:
+            lock_scopes(con, f"user:{uid}")
+            qid = con.execute("INSERT INTO quotes(user_id,symbol,price,currency,recorded_at) VALUES(?,?,?,?,?)", (uid, payload.symbol, payload.price, payload.currency, now())).lastrowid
+            quote = con.execute("SELECT * FROM quotes WHERE id=?", (qid,)).fetchone()
+            sid = snapshot_row(con, uid, quote, payload.note, "manual")
+            evaluate(con, uid, quote)
+        return {"id": sid, "quote_id": qid}
 
     @router.post("/api/snapshots", status_code=201)
     def manual_snapshot(payload: Snapshot, uid=Depends(user)):

@@ -1,5 +1,6 @@
 /* Compact, market-aware discovery. Quotes never write journal evidence implicitly. */
 (() => {
+  let asset=null;
   let captureQuote=null,captureKey='',captureEpoch=0,captureBusy=false,captureTimer=null;
   let market='crypto',watch=[],owner=null,busy=false,version=0,socket=null,streamKey='',lastTick=0;
   const selected={crypto:['BTCUSDT','ETHUSDT','SOLUSDT'],india:[],us:['AAPL','MSFT','NVDA'],fo:[]};
@@ -31,9 +32,10 @@
     const key=id(market,symbol),q=quotes.get(key),saved=watch.includes(key),asof=q?.as_of;
     const old=asof && Date.now()-Date.parse(asof)>90000;
     const change=q?.change_percent;
-    return `<article class="item discovery-card"><div class="eyebrow">${e(q?.provider||labels[market])}</div><h3>${e(q?.symbol||names.get(key)||symbol)}</h3>${q?`<strong class="discovery-price">${e(q.currency||'')} ${e(fmt(q.price))}</strong>${change==null?'':`<p class="${change<0?'price-down':'price-up'}">${change>0?'+':''}${e(Number(change).toFixed(2))}% <span class="meta">/ ${e(q.period||'session')}</span></p>`}<div class="meta">Range ${e(fmt(q.low))} – ${e(fmt(q.high))} · Volume ${e(fmt(q.volume))}${q.open_interest==null?'':`<br>Open interest ${e(fmt(q.open_interest))}`}<br>${q.timestamp_kind==='retrieved'?'Retrieved':old?'Last trade · market closed or quote old':'As of'} ${e(asof?date(asof):'timestamp unavailable')}</div>`:'<p class="meta">Awaiting provider quote</p>'}<div class="actions"><button type="button" data-watch="${e(symbol)}" data-saved="${saved}">${saved?'Remove':'☆ Watch'}</button><button type="button" class="secondary" data-research="${e(symbol)}">Capture idea</button></div></article>`;
+    return `<article class="item discovery-card"><div class="eyebrow">${e(q?.provider||labels[market])}</div><h3><button type="button" class="asset-open" data-open-asset="${e(symbol)}">${e(q?.symbol||names.get(key)||symbol)} <span aria-hidden="true">↗</span></button></h3>${q?`<strong class="discovery-price">${e(q.currency||'')} ${e(fmt(q.price))}</strong>${change==null?'':`<p class="${change<0?'price-down':'price-up'}">${change>0?'+':''}${e(Number(change).toFixed(2))}% <span class="meta">/ ${e(q.period||'session')}</span></p>`}<div class="meta">Range ${e(fmt(q.low))} – ${e(fmt(q.high))} · Volume ${e(fmt(q.volume))}${q.open_interest==null?'':`<br>Open interest ${e(fmt(q.open_interest))}`}<br>${q.timestamp_kind==='retrieved'?'Retrieved':old?'Last trade · market closed or quote old':'As of'} ${e(asof?date(asof):'timestamp unavailable')}</div>`:'<p class="meta">Awaiting provider quote</p>'}<div class="actions"><button type="button" data-watch="${e(symbol)}" data-saved="${saved}">${saved?'Remove':'☆ Watch'}</button><button type="button" class="secondary" data-open-asset="${e(symbol)}">Capture / Alert</button></div></article>`;
   }
   function render(){
+    if(asset && !asset.manual && $('#asset-dialog').open)renderAsset();
     $('#discovery-results').innerHTML=selected[market].length?selected[market].map(card).join(''):'<p class="empty">Search a stock or derivative contract above to load quotes.</p>';
     $('#discovery-watchlist').innerHTML=currentWatch().length?currentWatch().map(card).join(''):`<p class="empty">No ${e(labels[market].toLowerCase())} saved. Choose ☆ Watch. Use the market selector to switch lists.</p>`;
   }
@@ -62,9 +64,61 @@
   });});
   $('#discovery-instruments').addEventListener('click',event=>{const b=event.target.closest('[data-instrument]');if(!b)return;selected[market]=[b.dataset.instrument];$('#discovery-instruments').replaceChildren();void load();});
   $('#discovery-refresh').addEventListener('click',()=>void load());
-  $('[data-view="discovery"]').addEventListener('click',async event=>{const b=event.target.closest('[data-watch],[data-research]');if(!b)return;const symbol=b.dataset.watch||b.dataset.research;
+  $('[data-view="discovery"]').addEventListener('click',async event=>{const b=event.target.closest('[data-watch],[data-research],[data-open-asset]');if(!b)return;const symbol=b.dataset.watch||b.dataset.research||b.dataset.openAsset;
+    if(b.dataset.openAsset){openAsset(symbol);return;}
     if(b.dataset.research){$('#capture-market').value=market;const q=quotes.get(id(market,symbol));['quote-form','snapshot-form','decision-form','alert-form'].forEach(key=>{const form=$('#'+key);form.elements.symbol.value=(q?.instrument_key||q?.symbol||names.get(id(market,symbol))||symbol).slice(0,32);if(form.elements.currency&&q?.currency){const option=[...form.elements.currency.options].find(o=>o.value===q.currency);if(option)form.elements.currency.value=q.currency;}});panel('capture');void loadCapture();$('#quote-form').elements.price.focus();notice('Asset selected. Confirm the observed price and currency before saving.');return;}
     b.disabled=true;try{if(b.dataset.saved==='true')await api('discovery/watchlist/'+encodeURIComponent(id(market,symbol)),null,{method:'DELETE'});else await api('discovery/watchlist',{symbol,market});watch=(await api('discovery/watchlist')).symbols;render();stream();}catch(err){notice(err.message,true);}finally{b.disabled=false;}
+  });
+  function renderAsset(){
+    if(!asset||asset.manual)return;
+    const key=id(asset.market,asset.symbol),q=quotes.get(key);
+    $('#asset-title').textContent=q?.symbol||names.get(key)||asset.symbol;
+    $('#asset-market').textContent=labels[asset.market];
+    $('#asset-price').textContent=q?(q.currency+' '+fmt(q.price)):'Quote unavailable';
+    const old=q?.as_of&&Date.now()-Date.parse(q.as_of)>90000;
+    $('#asset-meta').textContent=q?(q.provider+' · '+(old?'Last available quote · ':'')+(q.timestamp_kind==='retrieved'?'Retrieved ':'As of ')+(q.as_of?date(q.as_of):'unknown time')):'A quote is needed for asset capture. Manual capture is available separately.';
+    $('#asset-capture').disabled=!q;
+    $('#asset-watch').textContent=watch.includes(key)?'Remove from watchlist':'☆ Add to watchlist';
+  }
+  function openAsset(symbol){
+    asset={market,symbol,manual:false};
+    $('#asset-choices').hidden=false;$('#asset-capture-form').hidden=true;$('#asset-feedback').textContent='';renderAsset();$('#asset-dialog').showModal();
+  }
+  function prepareCapture(manual){
+    const form=$('#asset-capture-form');form.reset();
+    const q=manual?null:quotes.get(id(asset.market,asset.symbol));
+    if(!manual&&!q)return;
+    if(manual){asset={manual:true,market,symbol:''};$('#asset-market').textContent='MANUAL CAPTURE';$('#asset-title').textContent='Keep a market moment';$('#asset-price').textContent='';$('#asset-meta').textContent='Enter your observed price and a note. No live feed is required.';}
+    $('#asset-choices').hidden=true;form.hidden=false;
+    form.elements.symbol.readOnly=!manual;form.elements.currency.disabled=!manual;form.elements.price.readOnly=!manual;
+    form.elements.symbol.value=q?.instrument_key||q?.symbol||'';form.elements.currency.value=q?.currency||(market==='crypto'?'USDT':market==='us'?'USD':'INR');form.elements.price.value=q?.price||'';
+    asset.quote=q?{...q}:null;
+    $('#asset-capture-note').textContent=q?'The displayed price is fixed for this capture. Its provider and quote time will be saved with your note.':'Manual entries are saved as your own observations.';
+    $('#asset-feedback').textContent='';
+    if(!$('#asset-dialog').open)$('#asset-dialog').showModal();
+    (manual?form.elements.symbol:form.elements.note).focus();
+  }
+  $('#asset-close').addEventListener('click',()=>$('#asset-dialog').close());
+  $('#asset-dialog').addEventListener('close',()=>{asset=null;});
+  $('#discovery-manual-capture').addEventListener('click',()=>prepareCapture(true));
+  $('#asset-capture').addEventListener('click',()=>prepareCapture(false));
+  $('#asset-alert').addEventListener('click',()=>{
+    if(!asset)return;const q=quotes.get(id(asset.market,asset.symbol)),form=$('#alert-form');
+    form.elements.symbol.value=q?.instrument_key||q?.symbol||asset.symbol;form.elements.currency.value=q?.currency||(asset.market==='us'?'USD':asset.market==='crypto'?'USDT':'INR');form.elements.target.value=q?.price||'';
+    $('#asset-dialog').close();panel('alerts');form.elements.target.focus();notice('Asset selected. Choose your target and save the alert.');
+  });
+  $('#asset-watch').addEventListener('click',async event=>{
+    if(!asset)return;const a={...asset},button=event.currentTarget;button.disabled=true;
+    try{const key=id(a.market,a.symbol);if(watch.includes(key))await api('discovery/watchlist/'+encodeURIComponent(key),null,{method:'DELETE'});else await api('discovery/watchlist',{market:a.market,symbol:a.symbol});watch=(await api('discovery/watchlist')).symbols;render();stream();$('#asset-feedback').textContent=watch.includes(key)?'Added to your watchlist.':'Removed from your watchlist.';}
+    catch(err){$('#asset-feedback').textContent=err.message;}finally{button.disabled=false;}
+  });
+  $('#asset-capture-form').addEventListener('submit',event=>{
+    event.preventDefault();const form=event.target;submit(form,async()=>{
+      const data=fields(form),q=asset?.quote;data.price=Number(data.price);
+      if(q){data.symbol=q.instrument_key||q.symbol;data.currency=q.currency;data.price=q.price;const provenance='Observed from '+q.provider+' · '+(q.timestamp_kind==='retrieved'?'retrieved ':'quote time ')+(q.as_of||'unknown')+'.';data.note=provenance+'\n'+data.note;if(data.note.length>5000)throw Error('Shorten your note to leave room for the quote details.');}
+      try{await api('captures',data);}catch(err){$('#asset-feedback').textContent=err.message;throw err;}
+      $('#asset-dialog').close();await refresh();notice('Capture saved to Memory.');
+    });
   });
   function renderCapture(){
     const q=captureQuote,button=$('#capture-use-price');
@@ -107,7 +161,7 @@
   $('#capture-use-price').addEventListener('click',()=>{renderCapture();if(!captureQuote||$('#capture-use-price').disabled)return;const f=$('#quote-form');f.elements.price.value=captureQuote.price;f.elements.currency.value=captureQuote.currency;f.elements.symbol.value=captureQuote.instrument_key||captureQuote.symbol;notice('Latest price filled. Save when you are ready to record it.');});
   document.querySelector('[data-discovery-tab="capture"]').addEventListener('click',()=>void loadCapture());
   setInterval(()=>{renderCapture();if($('#discovery-auto').checked)void loadCapture();},15000);
-  window.addEventListener('desk-tab' ,()=>{if(!visible())version++;stream();void load();});
+  window.addEventListener('desk-tab' ,()=>{if(!visible()){version++;if($('#asset-dialog').open)$('#asset-dialog').close();}stream();void load();});
   document.addEventListener('visibilitychange',()=>{stream();if(!document.hidden)void load();});
   $('#discovery-auto').addEventListener('change',()=>{stream();status($('#discovery-auto').checked?'Refreshing…':'Paused · last prices retain their timestamps.');if($('#discovery-auto').checked)void load();});
   setInterval(()=>{stream();if($('#discovery-auto').checked&&Date.now()-lastTick>10000)void load();},15000);

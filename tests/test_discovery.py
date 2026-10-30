@@ -110,3 +110,24 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(r.status_code,201,r.text)
         r=self.client.post('/api/quotes',json={'symbol':'NSE_FO|12345','price':100,'currency':'INR'})
         self.assertEqual(r.status_code,201,r.text)
+
+    def test_manual_capture_saves_price_and_note_together(self):
+        result=self.client.post('/api/captures',json={'symbol':'BTCUSDT','currency':'USDT','price':123.45,'note':'Support retest; keep this moment.'})
+        self.assertEqual(result.status_code,201,result.text)
+        state=self.client.get('/api/state').json()
+        self.assertEqual(len(state['quotes']),1)
+        self.assertEqual(len(state['snapshots']),1)
+        self.assertEqual(state['snapshots'][0]['quote_id'],result.json()['quote_id'])
+        self.assertEqual(state['snapshots'][0]['price'],123.45)
+        self.assertEqual(state['snapshots'][0]['note'],'Support retest; keep this moment.')
+        other=TestClient(self.app)
+        self.addCleanup(other.close)
+        other.post('/api/register',json={'username':'capture-other','password':'Another-password123!'})
+        self.assertEqual(other.get('/api/state').json()['snapshots'],[])
+
+    def test_invalid_capture_cannot_leave_partial_price(self):
+        result=self.client.post('/api/captures',json={'symbol':'BTCUSDT','currency':'USDT','price':123.45,'note':'x'*5001})
+        self.assertEqual(result.status_code,422)
+        state=self.client.get('/api/state').json()
+        self.assertEqual(state['quotes'],[])
+        self.assertEqual(state['snapshots'],[])
