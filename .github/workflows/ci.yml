@@ -49,6 +49,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: research-desk-browser-smoke
-          path: browser-smoke.png
+          path: |
+            browser-smoke.png
+            discovery-qa-*.png
           if-no-files-found: ignore
           retention-days: 3
