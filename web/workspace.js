@@ -60,6 +60,6 @@
   }
   document.querySelectorAll('[data-auth-mode]').forEach(button=>button.addEventListener('click',()=>authMode(button.dataset.authMode)));
   window.addEventListener('auth-open',()=>authMode('login'));
-  const example=$('#landing-example');example.open=window.matchMedia('(min-width: 901px)').matches;
+  const example=$('#landing-example'),wide=window.matchMedia('(min-width: 901px)');example.open=wide.matches;wide.addEventListener('change',event=>{example.open=event.matches;});
   sync();authMode('login');
 })();

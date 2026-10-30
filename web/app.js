@@ -151,7 +151,11 @@ function showQuant(selector, obj) {
   const interval=obj.win_rate_wilson_95;
   $(selector).innerHTML=(obj.message?'<div class="context-note"><p>'+e(obj.message)+'</p></div>':'')+'<div class="result-grid">'+metrics+'</div>'+(interval?'<p class="meta">95% interval for the sample win rate: '+e((100*interval.lower).toFixed(1))+'% – '+e((100*interval.upper).toFixed(1))+'%.</p>':'')+(obj.model?'<p class="meta">'+e(obj.model)+'</p>':'')+(obj.caveat?'<p class="calculation-note">'+e(obj.caveat)+'</p>':'')+'<details class="context-details"><summary>Calculation details</summary><pre class="quant-output">'+e(JSON.stringify(obj,null,2))+'</pre></details>';
 }
-async function refreshQuantProviders() { try { const r=await api('markets/providers'); list('#provider-result',r.markets,m=>'<div class="item"><strong>'+e(m.market)+'</strong> · '+e(m.provider)+' <span class="badge '+(m.available?'':'pending')+'">'+(m.available?'Available':'Credentials required')+'</span></div>','No providers'); }catch(err){ $('#provider-result').textContent=err.message; } }
+async function refreshQuantProviders() {
+  const marketNames={crypto_spot:'Crypto spot',india_equities_and_fo:'India · stocks & F&O',us_equities:'US stocks'};
+  const providerNames={binance:'Binance',upstox:'Upstox',alpaca:'Alpaca'};
+  try{const r=await api('markets/providers');list('#provider-result',r.markets,m=>`<div class="provider-row"><div><strong>${e(marketNames[m.market]||m.market)}</strong><small>${e(providerNames[m.provider]||m.provider)}</small></div><span class="badge ${m.available?'':'pending'}">${m.authentication==='public'?'Public feed':m.available?'Credentials set':'Setup needed'}</span></div>`,'No providers configured.');}catch(err){$('#provider-result').textContent=err.message;}
+}
 $('#quant-trades').addEventListener('submit',event=>{event.preventDefault();submit(event.target,async()=>{const raw=fields(event.target).returns;const values=raw.split(',').map(x=>Number(x.trim())/100);if(!raw.trim()||values.some(x=>!Number.isFinite(x)))throw Error('Enter valid comma-separated returns.');showQuant('#trade-result',await api('quant/trades',{returns:values}));});});
 $('#quant-option').addEventListener('submit',event=>{event.preventDefault();submit(event.target,async()=>{const v=fields(event.target);['spot','strike','years','volatility','rate'].forEach(k=>v[k]=Number(v[k]));showQuant('#option-result',await api('quant/option',v));});});
 $('#market-form').addEventListener('submit',event=>{event.preventDefault();submit(event.target,async()=>{const v=fields(event.target);if(v.market!=='crypto'){showQuant('#market-result',{message:'This provider needs server-side credentials and a provider-specific instrument selector. Open Discovery to search stocks and derivative contracts after connecting the provider.',provider:v.market});return;}const params=new URLSearchParams({symbol:v.symbol.toUpperCase(),interval:v.interval,limit:v.limit});const result=await api('markets/crypto/candles?'+params);showQuant('#market-result',{provider:result.provider,symbol:result.symbol,bars:result.candles.length,first:result.candles[0],last:result.candles.at(-1)});});});
@@ -181,6 +185,7 @@ $('#analyze-memory').addEventListener('click', async event => {
       $('#intelligence-result').prepend(summary);
     }
     notice('Analysis saved to your private history.');
+    $('#intelligence-result').scrollIntoView({behavior:'smooth',block:'start'});
   } catch (err) {
     $('#intelligence-result').textContent = err.message;
     notice(err.message, true);
