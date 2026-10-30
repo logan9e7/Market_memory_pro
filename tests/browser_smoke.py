@@ -209,6 +209,7 @@ def run():
                     for view in views:
                         page.locator('[data-tab="'+view+'"]').click()
                         expect(page.locator('[data-view="'+view+'"]').first).to_be_visible()
+                        expect(page.locator('[data-view="'+view+'"] h1').first).to_be_in_viewport()
                         assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'),view+' desktop overflow'
                         page.screenshot(path=str(ROOT / ('app-qa-'+view+'-desktop.png')),full_page=True)
                     page.set_viewport_size({'width':390,'height':844})
@@ -218,6 +219,7 @@ def run():
                         else:
                             page.locator('#workspace-mobile-more').select_option(view)
                         expect(page.locator('[data-view="'+view+'"]').first).to_be_visible()
+                        expect(page.locator('[data-view="'+view+'"] h1').first).to_be_in_viewport()
                         assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'),view+' mobile overflow'
                         page.screenshot(path=str(ROOT / ('app-qa-'+view+'-mobile.png')),full_page=True)
                     page.set_viewport_size({'width':1280,'height':1000})
